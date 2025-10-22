@@ -18,7 +18,7 @@ module.exports = {
 
       const data = await OrderItems.findAll({
         attributes: [
-          ["itemId", "itemId"], // Explicitly define column name
+          ["itemId", "itemId"],
           [fn("SUM", col("OrderItems.quantity")), "totalSold"],
           [literal('SUM("OrderItems"."quantity" * "OrderItems"."price")'), "totalRevenue"],
         ],
@@ -41,8 +41,8 @@ module.exports = {
             },
           },
         ],
-        group: ["OrderItems.itemId", "Item.id", "Item.name"], // Include all non-aggregated columns
-        order: [[literal("totalRevenue"), "DESC"]],
+        group: ["OrderItems.itemId", "Item.id", "Item.name"],
+        order: [[literal('SUM("OrderItems"."quantity" * "OrderItems"."price")'), "DESC"]], // Changed: repeat the calculation
       });
 
       res.json(data);
@@ -74,7 +74,7 @@ module.exports = {
         },
         attributes: [
           [
-            literal('DATE("createdAt")'),
+            literal('"createdAt"::date'),
             "date",
           ],
           [
@@ -82,8 +82,8 @@ module.exports = {
             "revenue",
           ],
         ],
-        group: [literal('DATE("createdAt")')],
-        order: [[literal('DATE("createdAt")'), "ASC"]],
+        group: [literal('"createdAt"::date')],
+        order: [[literal('"createdAt"::date'), "ASC"]],
         raw: true
       });
 
