@@ -30,18 +30,13 @@ const { startSession } = require("./contoller/tables");
 const { pay } = require("./contoller/paiement");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
-  origin: ['https://cafeapp-frontend-lij4.vercel.app',
-    'https://cafeapp-frontend-lij4.vercel.app/login',
-    'https://cafeapp-frontend-lij4.vercel.app/admin',
-    'https://cafeapp-frontend-lij4.vercel.app/getInfo',
-    "https://cafeapp-frontend-lij4.vercel.app/client-panier"
-  ],
+  origin: ['https://cafeapp-frontend-lij4.vercel.app'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
-
+app.use(express.json())
 app.use(bodyParser.json());
 
 // Configure Helmet with custom CSP for WebSocket
