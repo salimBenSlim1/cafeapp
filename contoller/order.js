@@ -94,89 +94,86 @@ updateOrderStatus:async(req,res)=>{
   }
 },
 getInsights: async (req, res) => {
-  const cafeId=req.cafe.id  
+  const cafeId = req.cafe.id;
   try {
-      const [topSelling, dailyRevenue, busyHours, avgOrder, revenueByTable] =
-        await Promise.all([
-          // 🥇 Top Selling Items
-          OrderItems.findAll({
-            include: [
-              { model: Item, attributes: ["name"],where:{cafeId} },
-              { model: Orders, attributes: [], where: { status: "served",cafeId } },
+    const [topSelling, dailyRevenue, busyHours, avgOrder, revenueByTable] =
+      await Promise.all([
+        // 🥇 Top Selling Items
+        OrderItems.findAll({
+          include: [
+            { model: Item, attributes: ["name"], where: { cafeId } },
+            { model: Orders, attributes: [], where: { status: "served", cafeId } },
+          ],
+          attributes: [
+            "itemId",
+            [sequelize.fn("SUM", sequelize.col("quantity")), "totalSold"],
+            [
+              sequelize.literal('SUM("OrderItems"."quantity" * "OrderItems"."price")'),
+              "totalRevenue",
             ],
-            attributes: [
-              "itemId",
-              [sequelize.fn("SUM", sequelize.col("quantity")), "totalSold"],
-              [
-                sequelize.fn(
-                  "SUM",
-                  sequelize.literal("quantity * OrderItems.price")
-                ),
-                "totalRevenue",
-              ],
-            ],
-            group: ["itemId", "Item.name"],
-            order: [[sequelize.literal("totalSold"), "DESC"]],
-            limit: 5,
-          }),
+          ],
+          group: ["OrderItems.itemId", "Item.id", "Item.name"], // Fixed: added OrderItems prefix and Item.id
+          order: [[sequelize.literal('SUM("OrderItems"."quantity")'), "DESC"]], // Fixed: use actual expression
+          limit: 5,
+        }),
 
-          // 🥈 Daily Revenue
-          Orders.findAll({
-            where: { status: "served",cafeId },
-            attributes: [
-              [sequelize.fn("DATE", sequelize.col("createdAt")), "day"],
-              [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalRevenue"],
-            ],
-            group: ["day"],
-            order: [[sequelize.literal("day"), "DESC"]],
-          }),
+        // 🥈 Daily Revenue
+        Orders.findAll({
+          where: { status: "served", cafeId },
+          attributes: [
+            [sequelize.literal('"Orders"."createdAt"::date'), "day"], // Fixed: PostgreSQL date cast
+            [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalRevenue"],
+          ],
+          group: [sequelize.literal('"Orders"."createdAt"::date')], // Fixed: PostgreSQL date cast
+          order: [[sequelize.literal('"Orders"."createdAt"::date'), "DESC"]], // Fixed: PostgreSQL date cast
+        }),
 
-          // 🥉 Busy Hours
-          Orders.findAll({
-            where: { status: "served",cafeId },
-            attributes: [
-              [sequelize.fn("HOUR", sequelize.col("createdAt")), "hour"],
-              [sequelize.fn("COUNT", sequelize.col("id")), "ordersCount"],
-            ],
-            group: ["hour"],
-            order: [[sequelize.literal("ordersCount"), "DESC"]],
-            limit: 5,
-          }),
+        // 🥉 Busy Hours
+        Orders.findAll({
+          where: { status: "served", cafeId },
+          attributes: [
+            [sequelize.fn("EXTRACT", sequelize.literal('HOUR FROM "Orders"."createdAt"')), "hour"], // Fixed: PostgreSQL EXTRACT
+            [sequelize.fn("COUNT", sequelize.col("id")), "ordersCount"],
+          ],
+          group: [sequelize.fn("EXTRACT", sequelize.literal('HOUR FROM "Orders"."createdAt"'))], // Fixed: use expression in group
+          order: [[sequelize.literal('COUNT("Orders"."id")'), "DESC"]], // Fixed: use actual expression
+          limit: 5,
+        }),
 
-          // 🍪 Average Order Value
-          Orders.findOne({
-            where: { status: "served",cafeId },
-            attributes: [
-              [sequelize.fn("AVG", sequelize.col("totalPrice")), "averageOrder"],
-            ],
-          }),
+        // 🍪 Average Order Value
+        Orders.findOne({
+          where: { status: "served", cafeId },
+          attributes: [
+            [sequelize.fn("AVG", sequelize.col("totalPrice")), "averageOrder"],
+          ],
+        }),
 
-          // ☕ Revenue by Table
-          Orders.findAll({
-            where: { status: "served",cafeId },
-            attributes: [
-              "tableId",
-              [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalRevenue"],
-            ],
-            include:{model:Table},
-            group: ["tableId"],
-            order: [[sequelize.literal("totalRevenue"), "DESC"]],
-          }),
-        ]);
+        // ☕ Revenue by Table
+        Orders.findAll({
+          where: { status: "served", cafeId },
+          attributes: [
+            "tableId",
+            [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalRevenue"],
+          ],
+          include: { model: Table, attributes: ["id", "name"] }, // Added attributes for clarity
+          group: ["Orders.tableId", "Table.id"], // Fixed: added Table.id for GROUP BY
+          order: [[sequelize.literal('SUM("Orders"."totalPrice")'), "DESC"]], // Fixed: use actual expression
+        }),
+      ]);
 
-      res.status(200).json({
-        topSelling,
-        dailyRevenue,
-        busyHours,
-        avgOrder,
-        revenueByTable,
-      });
-    } catch (err) {
-      console.error(err);
-      res
-        .status(500)
-        .json({ message: "Internal server error", error: err.message });
-    }
-  },
+    res.status(200).json({
+      topSelling,
+      dailyRevenue,
+      busyHours,
+      avgOrder,
+      revenueByTable,
+    });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ message: "Internal server error", error: err.message });
+  }
+},
 
 }
