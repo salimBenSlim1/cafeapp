@@ -33,6 +33,7 @@ app.use(cors({
   origin: ['https://cafeapp-frontend-lij4.vercel.app',
     'https://cafeapp-frontend-lij4.vercel.app/login',
     'https://cafeapp-frontend-lij4.vercel.app/admin',
+    'https://cafeapp-frontend-lij4.vercel.app/getInfo',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
