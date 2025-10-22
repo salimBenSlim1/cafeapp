@@ -155,7 +155,7 @@ getInsights: async (req, res) => {
             "tableId",
             [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalRevenue"],
           ],
-          include: { model: Table, attributes: ["id", "name"] }, // Added attributes for clarity
+          include: { model: Table }, // Added attributes for clarity
           group: ["Orders.tableId", "Table.id"], // Fixed: added Table.id for GROUP BY
           order: [[sequelize.literal('SUM("Orders"."totalPrice")'), "DESC"]], // Fixed: use actual expression
         }),
