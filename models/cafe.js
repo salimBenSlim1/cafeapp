@@ -2,7 +2,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../db/db-config");
 
-const Cafe = sequelize.define("Cafe", {
+const Cafe = sequelize.define("cafe", {
 id:{type:DataTypes.INTEGER,primaryKey:true,autoIncrement:true},
   name: { type: DataTypes.TEXT, allowNull: false },
   email: { type: DataTypes.TEXT, allowNull: false, unique: true },
