@@ -72,7 +72,10 @@ app.use('/api',orderRoute)
 app.use('/',functionRoute)
 app.use('/api',tableRoute)
 app.use('/api',chartRoute)
-app.post('/addOrder',orderLimiter,verifyTableSession,addOrder)
+app.post('/addOrder',
+  orderLimiter,
+  // verifyTableSession,
+  addOrder)
 app.get('/getUserItems/:id',getItemsForUser)
 app.get('/start-session',startSession)
 app.post('/api/pay',pay)
