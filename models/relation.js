@@ -35,4 +35,4 @@ async function initDB() {
     console.error('❌ DB Error:', error);
   }
 }
-// initDB()
+initDB()
