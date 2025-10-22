@@ -50,7 +50,7 @@ async function generateQRForTables(cafeId, domain) {
 
   for (const table of tables) {
     // const url = `https://${domain}cafeapp.tn?t=${table.qrKey}`;
-    const url = `https://f3a36c3ff427.ngrok-free.app/client-panier?t=${table.qrKey}`;
+    const url = `https://cafeapp-frontend-lij4.vercel.app/client-panier?t=${table.qrKey}`;
     const qrImage = await QRCode.toDataURL(url, {
       width: qrSize * 2, // Haute résolution pour l'impression
       margin: 1,
