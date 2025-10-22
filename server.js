@@ -34,6 +34,7 @@ app.use(cors({
     'https://cafeapp-frontend-lij4.vercel.app/login',
     'https://cafeapp-frontend-lij4.vercel.app/admin',
     'https://cafeapp-frontend-lij4.vercel.app/getInfo',
+    "https://cafeapp-frontend-lij4.vercel.app/client-panier"
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
