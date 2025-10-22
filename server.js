@@ -33,7 +33,7 @@ app.use(cors({
   origin: ['https://cafeapp-frontend-lij4.vercel.app'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key','key','token'],
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 app.use(express.json())
