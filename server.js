@@ -31,10 +31,10 @@ const { pay } = require("./contoller/paiement");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
   origin: 'https://cafeapp-frontend-lij4.vercel.app',
-  // credentials: true,
-  // methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  // allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
-  // exposedHeaders: ['Content-Range', 'X-Content-Range']
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 
 app.use(bodyParser.json());
