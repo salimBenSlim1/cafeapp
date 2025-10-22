@@ -1,7 +1,7 @@
 // Table Command
 const {DataTypes}=require('sequelize')
 const sequelize=require('../db/db-config')
-const Orders = sequelize.define('orders', {
+const Orders = sequelize.define('Orders', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey:true,

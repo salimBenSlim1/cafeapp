@@ -1,6 +1,6 @@
 const {DataTypes}=require('sequelize')
 const sequelize=require('../db/db-config')
-const Table = sequelize.define('table', {
+const Table = sequelize.define('Table', {
   id:{
     type:DataTypes.INTEGER,
     autoIncrement:true,
