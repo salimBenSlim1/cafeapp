@@ -301,7 +301,7 @@ const transporter = nodemailer.createTransport({
   secure: false, // true for 465, false for 587
   auth: {
     type: "OAuth2",
-    user: process.env.GMAIL_USER,
+    user: process.env.EMAIL_USER,
     clientId: process.env.CLIENT_ID,
     clientSecret: process.env.CLIENT_SECRET,
     refreshToken: process.env.REFRESH_TOKEN,
