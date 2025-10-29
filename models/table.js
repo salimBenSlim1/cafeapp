@@ -30,7 +30,7 @@ const Table = sequelize.define('Table', {
   cafeId: {
   type: DataTypes.INTEGER,
   references: {
-    model: "Cafes",
+    model: "Cafe",
     key: "id",
   },
   onDelete: "CASCADE",

@@ -18,7 +18,7 @@ const Orders = sequelize.define('Orders', {
   cafeId: {
   type: DataTypes.INTEGER,
   references: {
-    model: "Cafes",
+    model: "Cafe",
     key: "id",
   },
   onDelete: "CASCADE",

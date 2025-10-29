@@ -1,7 +1,8 @@
 const messageFormRoute=require('express').Router()
 const messageFormController=require('../contoller/messageForm')
+const adminMidlware = require('../middleware/adminMidlware')
 const { formLimiter } = require('../middleware/rateLimiter')
-messageFormRoute.get('/getForms',messageFormController.getForms)
-messageFormRoute.post('/add-new-form',messageFormController.addForm)
+messageFormRoute.get('/getForms',adminMidlware,messageFormController.getForms)
+messageFormRoute.post('/add-new-form',formLimiter,messageFormController.addForm)
 
 module.exports=messageFormRoute

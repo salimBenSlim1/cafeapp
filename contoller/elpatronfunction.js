@@ -2,6 +2,21 @@ const crypto = require('crypto');
 const Cafe = require('../models/cafe');
 const Table = require('../models/table');
 const Item = require('../models/item');
+const nodemailer = require('nodemailer');
+const jwt=require('jsonwebtoken')
+const { google } = require('googleapis');
+
+require('dotenv').config();
+const OAuth2 = google.auth.OAuth2;
+
+const oauth2Client = new OAuth2(
+  process.env.CLIENT_ID,
+  process.env.CLIENT_SECRET,
+  'https://developers.google.com/oauthplayground' // redirect URI
+);
+oauth2Client.setCredentials({
+  refresh_token: process.env.REFRESH_TOKEN,
+});
 
 // Génère une API Key unique
 function generateApiKey() {
@@ -204,15 +219,26 @@ async function downloadQRCodes (req, res) {
 // Fonction principale de provisionnement
 async function provisionTenant(req,res) {
     const now=new Date()
-    const apiKeyExpiresAt=now.getFullYear()+1
+const apiKeyExpiresAt = new Date(now)
+apiKeyExpiresAt.setDate(apiKeyExpiresAt.getDate() + 7);
   const password = generatePassword(); // on génère le password ici
+  const f=await Cafe.findOne({
+    where:{email:req.body.email}
+  })
+  if (f){
+    return res.status(400).json('email exist')
+  }
+  if (!req.body.cafeName||!req.body.email||!req.body.plan){
+    return res.status(400).json('invalid details')
+  }
   const tenant = await Cafe.create({
     name: req.body.cafeName,
     email: req.body.email,
     plan: req.body.plan,
     apiKey: generateApiKey(),
     password: password, // ajout du password
-    apiKeyExpiresAt
+    apiKeyExpiresAt,
+    verifiedPayment:'0'
   }).then(async(tenant)=>{
       const tablesData = [
   { cafeId: tenant.id, number: 1,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
@@ -246,6 +272,52 @@ await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
     ]);
     
     const data=await generateQRForTables(tenant.id,req.body.domaine);
+   const accessToken = await oauth2Client.getAccessToken();
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: process.env.EMAIL_USER,
+        clientId: process.env.CLIENT_ID,
+        clientSecret: process.env.CLIENT_SECRET,
+        refreshToken: process.env.REFRESH_TOKEN,
+        accessToken: accessToken.token,
+      },
+    });
+  const htmlMessage = `
+    <p>${req.body.cafeName},</p>
+
+    <p>Nous sommes ravis de vous accueillir sur <strong>CoffeeCloud</strong> — votre solution complète pour gérer votre café facilement et efficacement !</p>
+
+    <p>Voici vos identifiants de connexion :</p>
+    <ul>
+      <li><strong>Email :</strong>${req.body.email}</li>
+      <li><strong>Mot de passe :</strong>${password}</li>
+    </ul>
+
+    <p>Vous pouvez vous connecter à tout moment via ce lien :<br>
+    <a href="https://app.coffeecloud.com/login">https://app.coffeecloud.com/login</a></p>
+
+    <p>🔒 Pour des raisons de sécurité, nous vous recommandons de sauvegarder votre mot de passe .</p>
+
+    <p>Nous vous souhaitons beaucoup de succès avec votre café et sommes ravis de vous accompagner dans cette aventure !</p>
+
+    <p>— L’équipe <strong>CoffeeCloud</strong></p>
+  `;
+    const mailOptions = {
+      from: `"Coffai Support" <${process.env.EMAIL_USER}>`,
+      to: req.body.email,
+      subject: 'Welcome to Coffai ☕',
+      html: htmlMessage,
+    };
+
+   
+ 
+   
+
+    // Send mail
+    await transporter.sendMail(mailOptions);
     return res.status(200).json(tenant,password,data)
   })
 
@@ -258,6 +330,18 @@ await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
   // 👤 Création admin
   
 }
+async function authAdmin(req,res){
+  try {
+    if (req.body.email==="salimbenslim@outgmail.com"&&req.body.password==="eWFhdGlrc2FoYTEyM2FpemVmYmFpemV1ZmJpYXpldWJmYWl6ZXViZg=="){
+      const data=jwt.sign({role:'admin'},process.env.JWT_SECRET)
+      return res.status(200).json({data})
+    }
+    res.status(400).json('unauthorized')
+    
+  } catch (e) {
+    res.status(500).json('server err')
+  }
+}
 // Controller pour télécharger le PDF
 
-module.exports={provisionTenant,generateQRForTables,downloadQRCodes}
+module.exports={provisionTenant,generateQRForTables,downloadQRCodes,authAdmin}

@@ -3,7 +3,8 @@ const OrderItems = require("../models/orderItems")
 const Orders = require("../models/orders")
 const  sequelize  = require("../db/db-config");
 const Table = require("../models/table");
-const crypto=require('crypto')
+const crypto=require('crypto');
+const { getIo } = require("../socket");
 
 
 module.exports={
@@ -80,7 +81,11 @@ updateOrderStatus:async(req,res)=>{
   const {id}=req.params
   const {status,tableId}=req.body
   try {
+    if (!status||!tableId||!id) return res.status(400).json('no')
+    const or=await Orders.findOne({where:{id}})
+    if (!or) return res.status(400).json('no order found')
     const data=await Orders.update({status},{where:{id}})
+     getIo().emit("statusUpdated",data);
     const newToken = crypto.randomBytes(16).toString('hex');
     await Table.update(
     { sessionToken: newToken },

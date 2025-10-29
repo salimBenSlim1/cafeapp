@@ -12,7 +12,7 @@ const globalLimiter = rateLimit({
 // Stricter limiter for order creation
 const orderLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 20, // Limit each IP to 20 orders per hour
+    max: 10, // Limit each IP to 20 orders per hour
     message: {
         error: 'Too many orders created from this IP, please try again later.'
     }
@@ -24,9 +24,17 @@ const formLimiter=rateLimit({
         error:'too many form request please try again after 1 hour'
     }
 })
+const aiLimiter=rateLimit({
+    windowMs:60 * 60 * 1000 * 24 * 7,
+    max:1,
+    message:{
+        error:'too many form request please try again after 1 hour'
+    }
 
+})
 module.exports = {
     globalLimiter,
     orderLimiter,
-    formLimiter
+    formLimiter,
+    aiLimiter
 };

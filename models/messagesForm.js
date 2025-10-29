@@ -27,11 +27,7 @@ const MessagesForm = sequelize.define("messages_form", {
   plan: {
     type: DataTypes.TEXT, // lien vers l’image (cappuccino, jus d’orange…)
     allowNull: true,
-  },
-  domaine: {
-  type: DataTypes.TEXT,
-    allowNull:true
-}
+  }
 },{tableName:'messages_form'});
 
 module.exports = MessagesForm;

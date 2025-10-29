@@ -5,6 +5,7 @@ const OrderItems=require('./orderItems')
 const Item=require('./item')
 const Cafe = require('./cafe')
 const MessagesForm=require('./messagesForm')
+const Payement = require('./paiement')
 Table.hasMany(Order,{foreignKey:'tableId'})
 Order.belongsTo(Table,{foreignKey:'tableId'})
 
@@ -23,7 +24,8 @@ Table.belongsTo(Cafe, { foreignKey: 'cafeId' });
 Item.belongsTo(Cafe, { foreignKey: 'cafeId' });
 Order.belongsTo(Cafe, { foreignKey: 'cafeId' });
 
-
+Cafe.hasMany(Payement,{foreignKey:'cafeId'})
+Payement.belongsTo(Cafe,{foreignKey:'cafeId'})
 
 async function initDB() {
   try {
@@ -34,28 +36,30 @@ async function initDB() {
     console.log('Creating tables in order...');
     
     // 1. First, create tables with no foreign keys
-    await Cafe.sync({ alter: true });
+    await Cafe.sync({ alter: false });
     console.log('✓ Cafes table created');
     
     // 2. Create tables that depend on Cafe
-    await Item.sync({ alter: true });
+    await Item.sync({ alter: false });
     console.log('✓ Items table created');
     
-    await Table.sync({ alter: true });
+    await Table.sync({ alter: false });
     console.log('✓ Tables table created');
     
     // 3. Create Order table which depends on Table and Cafe
-    await Order.sync({ alter: true });
+    await Order.sync({ alter: false });
     console.log('✓ Orders table created');
     
     // 4. Finally create OrderItems which depends on Order and Item
-    await OrderItems.sync({ alter: true });
+    await OrderItems.sync({ alter: false });
     console.log('✓ OrderItems table created');
 
     // 5. Create any independent tables
-    await MessagesForm.sync({ alter: true });
+    await MessagesForm.sync({ alter: false });
     console.log('✓ MessagesForm table created');
-
+    
+    await Payement.sync({ alter: false });
+    console.log('✓ MessagesForm table created');
     console.log('📦 All Models synchronized successfully');
   } catch (error) {
     console.error('❌ DB Error:', error);

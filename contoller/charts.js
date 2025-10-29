@@ -8,7 +8,7 @@ module.exports = {
   getSalesByItem: async (req, res) => {
     try {
       const cafeId = req.cafe.id;
-
+      if (!req.cafe.id) return res.status(400).json('no cafe found')
       // 🗓️ Define the 7 last days (include today)
       const today = new Date();
       today.setHours(23, 59, 59, 999); // End of today
@@ -56,6 +56,7 @@ module.exports = {
   getDailyRevenue: async (req, res) => {
     try {
       const cafeId = req.cafe.id;
+      if (!req.cafe.id) return res.status(400).json('no cafe found')
 
       // Get today and 7 days ago with proper time boundaries
       const today = new Date();

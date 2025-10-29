@@ -4,85 +4,159 @@ const Item=require('../models/item')
 const Table = require('../models/table')
 const { getIo } = require("../socket");
 const {literal,Op} =require('sequelize')
+const sequelize=require('../db/db-config')
 
 module.exports={
-   addOrder: async (req, res) => {
-  const {items,cafeId } = req.body;
-  const tableId=req.table.id
+    addOrder : async (req, res) => {
+  const { items, cafeId } = req.body;
+  const tableId = req.table.id;
+  const transaction = await sequelize.transaction();
 
   try {
-    // نلقاو آخر order للطاولة في الكافيه هذا فقط
-    let order = await Order.findOne({
-      where: { tableId, cafeId },
-      order: [["createdAt", "DESC"]],
-    });
-
-    // إذا ما فماش order أو آخر واحد تمّ خدمتو → نعمل واحد جديد
-    if (!order || order.status === "served") {
-      order = await Order.create({
-        totalPrice: 0,
-        status: "pending",
-        tableId,
-        cafeId, // ✅ نربط الكافيه
-      });
+    // 1. Validate input
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Invalid items array' });
     }
 
-    // نحسب total price
+    // 2. Pre-fetch all items with stock check
+    const itemIds = items.map(it => it.itemId);
+    const existingItems = await Item.findAll({
+      where: { 
+        id: itemIds,
+        cafeId // Security: Ensure items belong to the café
+      },
+      lock: transaction.LOCK.UPDATE, // Lock rows for update
+      transaction
+    });
+
+    // Validate all items exist and have sufficient stock
+    const itemMap = new Map(existingItems.map(item => [item.id, item]));
+    for (const orderItem of items) {
+      const item = itemMap.get(orderItem.itemId);
+      if (!item) {
+        await transaction.rollback();
+        return res.status(404).json({ 
+          error: `Item ${orderItem.itemId} not found or doesn't belong to this café`
+        });
+      }
+      if (item.stock < orderItem.quantity) {
+        await transaction.rollback();
+        return res.status(400).json({
+          error: `Insufficient stock for item ${item.name}. Available: ${item.stock}`
+        });
+      }
+    }
+
+    // 3. Find or create order with proper status check
+    const [order, created] = await Order.findOrCreate({
+      where: {
+        tableId,
+        cafeId,
+        status: { [Op.ne]: 'served' }
+      },
+      defaults: {
+        totalPrice: 0,
+        status: 'pending'
+      },
+      transaction
+    });
+
+    // 4. Process items and update stock atomically
     let total = order.totalPrice || 0;
+    const orderItemsToCreate = [];
+    const stockUpdates = [];
 
     for (const it of items) {
-      // ✅ نجيب item متاع نفس الكافيه فقط
-      const item = await Item.findOne({
-        where: { id: it.itemId, cafeId },
-      });
-      if (!item) continue; // حماية إضافية ضد بيانات خاطئة
-      if (item.stock-it.quantity<3){
-
-        getIo().emit("newAlert", {name:item.name,stock:item.stock});
-  }
-      // نلقاو orderItem الموجود وإلا نعملو جديد
+      const item = itemMap.get(it.itemId);
+      
+      // Find existing order item
       let orderItem = await OrderItems.findOne({
         where: {
           orderId: order.id,
-          itemId: it.itemId,
+          itemId: it.itemId
         },
+        transaction
       });
 
-      if (!orderItem) {
-        orderItem = await OrderItems.create({
+      const newQuantity = orderItem ? orderItem.quantity + it.quantity : it.quantity;
+
+      // Update or create order item
+      if (orderItem) {
+        await orderItem.update({
+          quantity: newQuantity
+        }, { transaction });
+      } else {
+        orderItemsToCreate.push({
           quantity: it.quantity,
           price: item.price,
           itemId: item.id,
-          orderId: order.id,
+          orderId: order.id
         });
-    await Item.update(
-  { stock: literal(`GREATEST(stock - ${it.quantity}, 0)`) },
-  { where: { id: it.itemId } });
-  
-      } else {
-        
-        await Item.update(
-          { stock: literal(`GREATEST(stock - ${it.quantity}, 0)`) },
-          { where: { id: it.itemId } });
-        orderItem.quantity += it.quantity;
-        await orderItem.save();
-        
       }
 
+      // Prepare stock update
+      stockUpdates.push(
+        Item.update(
+          { 
+            stock: literal(`stock - ${it.quantity}`),
+            updatedAt: new Date()
+          },
+          { 
+            where: { 
+              id: it.itemId,
+              stock: { [Op.gte]: it.quantity } // Double-check stock availability
+            },
+            transaction
+          }
+        )
+      );
+
+      // Update running total
       total += it.quantity * item.price;
+
+      // Check if stock will be low after update
+      if (item.stock - it.quantity < 3) {
+        getIo().emit("newAlert", {
+          name: item.name,
+          stock: item.stock - it.quantity
+        });
+      }
     }
 
-    // نحين total price
-    order.totalPrice = total;
-    await order.save();
+    // 5. Create new order items in bulk
+    if (orderItemsToCreate.length > 0) {
+      await OrderItems.bulkCreate(orderItemsToCreate, { transaction });
+    }
 
-    // نعلم الـfront end عبر socket
-    getIo().emit("newOrder", order);
+    // 6. Execute all stock updates
+    await Promise.all(stockUpdates);
 
-    res.status(201).json("✅ Commande créée avec succès !");
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ "internal server error": e.message });
+    // 7. Update order total
+    await order.update({ 
+      totalPrice: total 
+    }, { transaction });
+
+    // 8. Commit transaction
+    await transaction.commit();
+
+    // 9. Notify frontend
+    getIo().emit("newOrder", {
+      ...order.toJSON(),
+      items: orderItemsToCreate
+    });
+
+    return res.status(201).json({
+      message: "Order created successfully",
+      orderId: order.id
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Order creation error:', error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
   }
 },
 
@@ -183,6 +257,7 @@ getItemsEndSoon: async (req, res) => {
   const cafeId = req.cafe.id;
 
   try {
+    
     const orderItem = await OrderItems.findOne({
       where: { id },
       include: [{ model: Order, where: { cafeId } }],

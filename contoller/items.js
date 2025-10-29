@@ -32,6 +32,8 @@ module.exports={
       const cafeId=req.cafe.id
 
         try {
+          const it=await Item.findOne({where:{id,cafeId}})
+          if (!it||!cafeId||!id) return res.status(400).json('no item found')
             const data=await Item.update(req.body,{where:{id,cafeId}})
             if (data) return res.status(200).json({'updated':data})
             else return res.status(404).json('something wen wrong')
@@ -47,7 +49,7 @@ module.exports={
   try {
     // 🔍 نلقاو الـItem ونتأكد أنه تابع للكافيه هذا
     const item = await Item.findOne({ where: { id, cafeId } });
-    if (!item)
+    if (!item||!cafeId||!id)
       return res.status(404).json({ message: "❌ Item not found or unauthorized" });
 
     // 🧾 نلقاو كل الـOrderItems اللي تستعمل هذا المنتج
@@ -98,6 +100,7 @@ module.exports={
 },
 getItemsForUser:async(req,res)=>{
   try {
+    if (!req.params.id) return res.status(400).json('no item')
     const data=await Item.findAll({where:{cafeId:req.params.id}})
     if (!data) return res.status(404).json('something went wrong')
     res.status(200).json(data)

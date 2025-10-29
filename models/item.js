@@ -30,10 +30,11 @@ const Item = sequelize.define("Item", {
   cafeId: {
   type: DataTypes.INTEGER,
   references: {
-    model: "Cafes",
+    model: "Cafe",
     key: "id",
   },
   onDelete: "CASCADE",
+  allowNull: false,
 }
 
 });

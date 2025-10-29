@@ -27,13 +27,15 @@ const chartRoute = require("./routes/charts");
 const verifyTableSession = require("./middleware/verifyTableSession");
 const { getItemsForUser } = require("./contoller/items");
 const { startSession } = require("./contoller/tables");
-const { pay } = require("./contoller/paiement");
+const { pay, getCoffePayments, createPaymentForCoffe, deletePaymentForCoffe } = require("./contoller/paiement");
+const paymentRouter = require("./routes/paiment");
+const adminMidlware = require("./middleware/adminMidlware");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
   origin: ['https://cafeapp-frontend-lij4.vercel.app'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key','key','token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key','key','token','X-User-Lng','X-User-Lat','token-jwt'],
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 app.use(express.json())
@@ -72,14 +74,17 @@ app.use('/api',orderRoute)
 app.use('/',functionRoute)
 app.use('/api',tableRoute)
 app.use('/api',chartRoute)
+app.use('/api',paymentRouter)
 app.post('/addOrder',
-  orderLimiter,
+  // orderLimiter,
 verifyTableSession,
   addOrder)
 app.get('/getUserItems/:id',getItemsForUser)
 app.get('/start-session',startSession)
-app.post('/api/pay',pay)
-
+app.post('/pay',pay)
+app.post('/createUserPayment',adminMidlware,createPaymentForCoffe)
+app.delete('/deleteUserPayment/:id',adminMidlware,deletePaymentForCoffe)
+app.get('/getPayments',adminMidlware,getCoffePayments)
 // Proxy middleware for frontend - handle non-API routes
 // app.use('/', createProxyMiddleware({
 //     target: 'http://localhost:3000',
