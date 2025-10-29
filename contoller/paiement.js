@@ -117,7 +117,7 @@ createPaymentForCoffe:async(req,res)=>{
     try {
         const data=await Payement.create(req.body)
         if (!data) return res.status(400).json('no ')
-        res.status(200).json('created')
+        res.status(200).json(data)
         
     } catch (e) {
         
