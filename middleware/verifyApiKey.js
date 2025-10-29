@@ -22,7 +22,7 @@ module.exports = async function verifyApiKey(req, res, next) {
     }
 
     // Optionally check expiration
-    if (new Date() > new Date(cafe.apiKeyExpiresAt)) {
+    if (new Date() > new Date(cafe.apiKeyExpiresAt)||cafe.verifiedPayment=='0') {
       console.warn("🔒 Expired API Key — redirecting to login");
       return res.status(401).json({ redirectTo: "https://cafeapp-frontend-lij4.vercel.app/login" });
 
