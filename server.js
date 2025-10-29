@@ -31,7 +31,21 @@ const { pay, getCoffePayments, createPaymentForCoffe, deletePaymentForCoffe } = 
 const paymentRouter = require("./routes/paiment");
 const adminMidlware = require("./middleware/adminMidlware");
 // Configure CORS to accept both localhost and ngrok
-app.use(cors());
+app.use(cors({
+ origin: ['https://cafeapp-frontend-lij4.vercel.app',
+    'https://cafeapp-frontend-lij4.vercel.app/login',
+    'https://cafeapp-frontend-lij4.vercel.app/admin',
+    'https://cafeapp-frontend-lij4.vercel.app/getInfo',
+    "https://cafeapp-frontend-lij4.vercel.app/client-panier"
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 'Authorization', 'x-api-key', 'key', 'token',
+    'X-User-Lng', 'X-User-Lat', 'token-jwt','Access-Control-Allow-Origin'
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
+}));
 
 app.use(express.json())
 app.use(bodyParser.json());
