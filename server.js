@@ -33,7 +33,7 @@ const adminMidlware = require("./middleware/adminMidlware");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
  origin: ['https://cafeapp-frontend-lij4.vercel.app',
-  "https://cafeapp-frontend-lij4.vercel.app/login"
+  'https://cafeapp-frontend-lij4.vercel.app/login'
  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
