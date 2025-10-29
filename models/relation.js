@@ -1,78 +1,100 @@
-const Table=require('./table')
-const sequelize=require('../db/db-config')
-const Order=require('./orders')
-const OrderItems=require('./orderItems')
-const Item=require('./item')
-const Cafe = require('./cafe')
-const MessagesForm=require('./messagesForm')
-const Payement = require('./paiement')
-Table.hasMany(Order,{foreignKey:'tableId'})
-Order.belongsTo(Table,{foreignKey:'tableId'})
+const Table = require('./table');
+const sequelize = require('../db/db-config');
+const Order = require('./orders');
+const OrderItems = require('./orderItems');
+const Item = require('./item');
+const Cafe = require('./cafe');
+const MessagesForm = require('./messagesForm');
+const Payement = require('./paiement');
 
-Item.hasMany(OrderItems,{foreignKey:'itemId'})
-OrderItems.belongsTo(Item,{foreignKey:'itemId'})
+// ===== RELATIONS =====
+Table.hasMany(Order, { foreignKey: 'tableId' });
+Order.belongsTo(Table, { foreignKey: 'tableId' });
 
-Order.hasMany(OrderItems,{foreignKey:'orderId'})
-OrderItems.belongsTo(Order,{foreignKey:'orderId'})
+Item.hasMany(OrderItems, { foreignKey: 'itemId' });
+OrderItems.belongsTo(Item, { foreignKey: 'itemId' });
+
+Order.hasMany(OrderItems, { foreignKey: 'orderId' });
+OrderItems.belongsTo(Order, { foreignKey: 'orderId' });
 
 // 🏢 CAFE RELATIONS
 Cafe.hasMany(Table, { foreignKey: 'cafeId', onDelete: 'CASCADE' });
 Cafe.hasMany(Item, { foreignKey: 'cafeId', onDelete: 'CASCADE' });
 Cafe.hasMany(Order, { foreignKey: 'cafeId', onDelete: 'CASCADE' });
+Cafe.hasMany(Payement, { foreignKey: 'cafeId', onDelete: 'CASCADE' });
 
 Table.belongsTo(Cafe, { foreignKey: 'cafeId' });
 Item.belongsTo(Cafe, { foreignKey: 'cafeId' });
 Order.belongsTo(Cafe, { foreignKey: 'cafeId' });
+Payement.belongsTo(Cafe, { foreignKey: 'cafeId' });
 
-Cafe.hasMany(Payement,{foreignKey:'cafeId'})
-Payement.belongsTo(Cafe,{foreignKey:'cafeId'})
-
+// ===== INIT FUNCTION =====
 async function initDB() {
   try {
     await sequelize.authenticate();
     console.log('✅ Database Connected!');
-    
-    // Sync tables in order based on dependencies
-    console.log('Creating tables in order...');
-    
-    // 1. First, create tables with no foreign keys
-    await Cafe.sync({ alter: true });
-    console.log('✓ Cafes table created');
-    
-    // 2. Create tables that depend on Cafe
-    await Item.sync({ alter: false });
-    console.log('✓ Items table created');
-    
-    await Table.sync({ alter: false });
-    console.log('✓ Tables table created');
-    
-    // 3. Create Order table which depends on Table and Cafe
-    await Order.sync({ alter: false });
-    console.log('✓ Orders table created');
-    
-    // 4. Finally create OrderItems which depends on Order and Item
-    await OrderItems.sync({ alter: false });
+
+    console.log('🧹 Dropping tables in dependency order...');
+
+    // Drop children first to avoid FK conflicts
+    await OrderItems.drop({ cascade: true });
+    console.log('🗑️ OrderItems dropped');
+
+    await Order.drop({ cascade: true });
+    console.log('🗑️ Orders dropped');
+
+    await Payement.drop({ cascade: true });
+    console.log('🗑️ Payement dropped');
+
+    await Table.drop({ cascade: true });
+    console.log('🗑️ Tables dropped');
+
+    await Item.drop({ cascade: true });
+    console.log('🗑️ Items dropped');
+
+    await MessagesForm.drop({ cascade: true });
+    console.log('🗑️ MessagesForm dropped');
+
+    await Cafe.drop({ cascade: true });
+    console.log('🗑️ Cafe dropped');
+
+    console.log('✅ All tables dropped successfully.');
+
+    console.log('📦 Recreating tables...');
+    await Cafe.sync({ force: true });
+    console.log('✓ Cafe table created');
+
+    await Item.sync({ force: true });
+    console.log('✓ Item table created');
+
+    await Table.sync({ force: true });
+    console.log('✓ Table table created');
+
+    await Order.sync({ force: true });
+    console.log('✓ Order table created');
+
+    await OrderItems.sync({ force: true });
     console.log('✓ OrderItems table created');
 
-    // 5. Create any independent tables
-    await MessagesForm.sync({ alter: false });
+    await Payement.sync({ force: true });
+    console.log('✓ Payement table created');
+
+    await MessagesForm.sync({ force: true });
     console.log('✓ MessagesForm table created');
-    
-    await Payement.sync({ alter: true });
-    console.log('✓ MessagesForm table created');
-    console.log('📦 All Models synchronized successfully');
+
+    console.log('🚀 All models recreated successfully!');
   } catch (error) {
     console.error('❌ DB Error:', error);
-    // Log more details about the error
-    if (error.parent) {
-      console.error('Detailed error:', error.parent.message);
-    }
-    throw error; // Re-throw to ensure the application fails to start if DB setup fails
+    if (error.parent) console.error('Detailed error:', error.parent.message);
+    throw error;
   }
 }
 
-// Execute the initialization
-// initDB().catch(err => {
-//   console.error('Failed to initialize database:', err);
-//   process.exit(1); // Exit with error if DB initialization fails
-// });
+
+// Uncomment to run
+initDB().catch(err => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1);
+});
+
+module.exports = { initDB };
