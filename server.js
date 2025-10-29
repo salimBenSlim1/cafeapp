@@ -35,9 +35,18 @@ app.use(cors({
   origin: 'https://cafeapp-frontend-lij4.vercel.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key','key','token','X-User-Lng','X-User-Lat','token-jwt'],
+  allowedHeaders: [
+    'Content-Type', 'Authorization', 'x-api-key', 'key', 'token',
+    'X-User-Lng', 'X-User-Lat', 'token-jwt'
+  ],
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
+app.options('*', cors()); // ✅ handle preflight
+app.enable('trust proxy');
+app.use((req, res, next) => {
+  if (req.secure || req.method === 'OPTIONS') return next();
+  res.redirect(`https://${req.headers.host}${req.url}`);
+});
 app.use(express.json())
 app.use(bodyParser.json());
 
