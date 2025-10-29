@@ -286,12 +286,12 @@ await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
   //     },
   //   });
  const oAuth2Client = new google.auth.OAuth2(
-  CLIENT_ID,
-  CLIENT_SECRET,
-  REDIRECT_URI
+   process.env.CLIENT_ID,
+  process.env.CLIENT_SECRET,
+  'https://developers.google.com/oauthplayground' // redirect URI
 );
 
-oAuth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
+oAuth2Client.setCredentials({ refresh_token: process.env.REFRESH_TOKEN });
 
 const accessToken = await oAuth2Client.getAccessToken();
 
@@ -300,9 +300,9 @@ const transporter = nodemailer.createTransport({
   auth: {
     type: "OAuth2",
     user: process.env.GMAIL_USER,
-    clientId: CLIENT_ID,
-    clientSecret: CLIENT_SECRET,
-    refreshToken: REFRESH_TOKEN,
+    clientId: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    refreshToken: process.env.REFRESH_TOKEN,
     accessToken: accessToken.token,
   },
 });
