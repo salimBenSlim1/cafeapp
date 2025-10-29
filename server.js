@@ -39,7 +39,7 @@ app.use(cors({
     'Content-Type', 'Authorization', 'x-api-key', 'key', 'token',
     'X-User-Lng', 'X-User-Lat', 'token-jwt','Access-Control-Allow-Origin'
   ],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
+  exposedHeaders: ['Content-Range', 'X-Content-Range','Access-Control-Allow-Origin']
 }));
 
 app.use(express.json())
