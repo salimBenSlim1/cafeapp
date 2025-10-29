@@ -7,16 +7,16 @@ const jwt=require('jsonwebtoken')
 const { google } = require('googleapis');
 
 require('dotenv').config();
-const OAuth2 = google.auth.OAuth2;
+// const OAuth2 = google.auth.OAuth2;
 
-const oauth2Client = new OAuth2(
-  process.env.CLIENT_ID,
-  process.env.CLIENT_SECRET,
-  'https://developers.google.com/oauthplayground' // redirect URI
-);
-oauth2Client.setCredentials({
-  refresh_token: process.env.REFRESH_TOKEN,
-});
+// const oauth2Client = new OAuth2(
+//   process.env.CLIENT_ID,
+//   process.env.CLIENT_SECRET,
+//   'https://developers.google.com/oauthplayground' // redirect URI
+// );
+// oauth2Client.setCredentials({
+//   refresh_token: process.env.REFRESH_TOKEN,
+// });
 
 // Génère une API Key unique
 function generateApiKey() {
@@ -272,19 +272,40 @@ await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
     ]);
     
     const data=await generateQRForTables(tenant.id,req.body.domaine);
-   const accessToken = await oauth2Client.getAccessToken();
+  //  const accessToken = await oauth2Client.getAccessToken();
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        type: 'OAuth2',
-        user: process.env.EMAIL_USER,
-        clientId: process.env.CLIENT_ID,
-        clientSecret: process.env.CLIENT_SECRET,
-        refreshToken: process.env.REFRESH_TOKEN,
-        accessToken: accessToken.token,
-      },
-    });
+  //   const transporter = nodemailer.createTransport({
+  //     service: 'gmail',
+  //     auth: {
+  //       type: 'OAuth2',
+  //       user: process.env.EMAIL_USER,
+  //       clientId: process.env.CLIENT_ID,
+  //       clientSecret: process.env.CLIENT_SECRET,
+  //       refreshToken: process.env.REFRESH_TOKEN,
+  //       accessToken: accessToken.token,
+  //     },
+  //   });
+ const oAuth2Client = new google.auth.OAuth2(
+  CLIENT_ID,
+  CLIENT_SECRET,
+  REDIRECT_URI
+);
+
+oAuth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
+
+const accessToken = await oAuth2Client.getAccessToken();
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    type: "OAuth2",
+    user: process.env.GMAIL_USER,
+    clientId: CLIENT_ID,
+    clientSecret: CLIENT_SECRET,
+    refreshToken: REFRESH_TOKEN,
+    accessToken: accessToken.token,
+  },
+});
   const htmlMessage = `
     <p>${req.body.cafeName},</p>
 
@@ -316,7 +337,6 @@ await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
  
    
 
-    // Send mail
     await transporter.sendMail(mailOptions);
     return res.status(200).json(tenant,password,data)
   })
