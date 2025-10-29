@@ -42,7 +42,7 @@ const Payement = sequelize.define('payment', {
   cafeId: {
   type: DataTypes.INTEGER,
   references: {
-    model: "Cafe",
+    model: "Cafes",
     key: "id",
   },
   onDelete: "CASCADE",
