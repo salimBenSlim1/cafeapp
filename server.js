@@ -32,7 +32,7 @@ const paymentRouter = require("./routes/paiment");
 const adminMidlware = require("./middleware/adminMidlware");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
-  origin: 'https://cafeapp-frontend-lij4.vercel.app',
+ origin: ['https://cafeapp-frontend-lij4.vercel.app'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -41,12 +41,7 @@ app.use(cors({
   ],
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
-app.options('*', cors()); // ✅ handle preflight
-app.enable('trust proxy');
-app.use((req, res, next) => {
-  if (req.secure || req.method === 'OPTIONS') return next();
-  res.redirect(`https://${req.headers.host}${req.url}`);
-});
+
 app.use(express.json())
 app.use(bodyParser.json());
 
