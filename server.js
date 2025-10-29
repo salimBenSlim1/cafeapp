@@ -37,7 +37,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type', 'Authorization', 'x-api-key', 'key', 'token',
-    'X-User-Lng', 'X-User-Lat', 'token-jwt'
+    'X-User-Lng', 'X-User-Lat', 'token-jwt','Access-Control-Allow-Origin'
   ],
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
