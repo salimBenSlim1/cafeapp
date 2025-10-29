@@ -36,7 +36,7 @@ async function initDB() {
     console.log('Creating tables in order...');
     
     // 1. First, create tables with no foreign keys
-    await Cafe.sync({ alter: false });
+    await Cafe.sync({ alter: true });
     console.log('✓ Cafes table created');
     
     // 2. Create tables that depend on Cafe
@@ -58,7 +58,7 @@ async function initDB() {
     await MessagesForm.sync({ alter: false });
     console.log('✓ MessagesForm table created');
     
-    await Payement.sync({ alter: false });
+    await Payement.sync({ alter: true });
     console.log('✓ MessagesForm table created');
     console.log('📦 All Models synchronized successfully');
   } catch (error) {
@@ -72,7 +72,7 @@ async function initDB() {
 }
 
 // Execute the initialization
-// initDB().catch(err => {
-//   console.error('Failed to initialize database:', err);
-//   process.exit(1); // Exit with error if DB initialization fails
-// });
+initDB().catch(err => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1); // Exit with error if DB initialization fails
+});
