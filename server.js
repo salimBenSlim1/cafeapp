@@ -32,16 +32,7 @@ const paymentRouter = require("./routes/paiment");
 const adminMidlware = require("./middleware/adminMidlware");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
-  origin: ['https://cafeapp-frontend-lij4.vercel.app',
-    'https://cafeapp-frontend-lij4.vercel.app/getInfo',
-    'https://cafeapp-frontend-lij4.vercel.app/login',
-    'https://cafeapp-frontend-lij4.vercel.app/admin',
-    'https://cafeapp-frontend-lij4.vercel.app/admin/orders',
-    'https://cafeapp-frontend-lij4.vercel.app/admin/charts',
-    'https://cafeapp-frontend-lij4.vercel.app/admin/agent',
-    'https://cafeapp-frontend-lij4.vercel.app/admin/items',
-    'https://cafeapp-frontend-lij4.vercel.app/admin/qrcode',
-  ],
+  origin: 'https://cafeapp-frontend-lij4.vercel.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key','key','token','X-User-Lng','X-User-Lat','token-jwt'],
