@@ -308,7 +308,14 @@ const transporter = nodemailer.createTransport({
     accessToken: accessToken.token,
   },
   tls: {
-    rejectUnauthorized: true
+    rejectUnauthorized: false
+  }
+});
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("SMTP connection failed:", error);
+  } else {
+    console.log("SMTP connection successful:", success);
   }
 });
   const htmlMessage = `
