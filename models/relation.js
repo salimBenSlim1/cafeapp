@@ -61,25 +61,25 @@ async function initDB() {
     console.log('✅ All tables dropped successfully.');
 
     console.log('📦 Recreating tables...');
-    await Cafe.sync({ force: true });
+    await Cafe.sync({ force: false });
     console.log('✓ Cafe table created');
 
-    await Item.sync({ force: true });
+    await Item.sync({ force: false });
     console.log('✓ Item table created');
 
-    await Table.sync({ force: true });
+    await Table.sync({ force: false });
     console.log('✓ Table table created');
 
-    await Order.sync({ force: true });
+    await Order.sync({ force: false });
     console.log('✓ Order table created');
 
-    await OrderItems.sync({ force: true });
+    await OrderItems.sync({ force: false });
     console.log('✓ OrderItems table created');
 
-    await Payement.sync({ force: true });
+    await Payement.sync({ force: false });
     console.log('✓ Payement table created');
 
-    await MessagesForm.sync({ force: true });
+    await MessagesForm.sync({ force: false });
     console.log('✓ MessagesForm table created');
 
     console.log('🚀 All models recreated successfully!');
