@@ -1,6 +1,7 @@
 // Table Command
 const {DataTypes}=require('sequelize')
-const sequelize=require('../db/db-config')
+const sequelize=require('../db/db-config');
+const Cafe = require('./cafe');
 const Orders = sequelize.define('Orders', {
   id: {
     type: DataTypes.INTEGER,
@@ -18,7 +19,7 @@ const Orders = sequelize.define('Orders', {
   cafeId: {
   type: DataTypes.INTEGER,
   references: {
-    model: "Cafe",
+    model: Cafe,
     key: "id",
   },
   onDelete: "CASCADE",
