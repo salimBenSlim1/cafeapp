@@ -296,7 +296,9 @@ oAuth2Client.setCredentials({ refresh_token: process.env.REFRESH_TOKEN });
 const accessToken = await oAuth2Client.getAccessToken();
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587, // or 465 for SSL
+  secure: false, // true for 465, false for 587
   auth: {
     type: "OAuth2",
     user: process.env.GMAIL_USER,
@@ -305,6 +307,9 @@ const transporter = nodemailer.createTransport({
     refreshToken: process.env.REFRESH_TOKEN,
     accessToken: accessToken.token,
   },
+  tls: {
+    rejectUnauthorized: true
+  }
 });
   const htmlMessage = `
     <p>${req.body.cafeName},</p>
