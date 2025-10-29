@@ -72,7 +72,7 @@ async function initDB() {
 }
 
 // Execute the initialization
-// initDB().catch(err => {
-//   console.error('Failed to initialize database:', err);
-//   process.exit(1); // Exit with error if DB initialization fails
-// });
+initDB().catch(err => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1); // Exit with error if DB initialization fails
+});
