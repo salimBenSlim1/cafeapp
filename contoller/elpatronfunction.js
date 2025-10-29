@@ -297,8 +297,8 @@ const accessToken = await oAuth2Client.getAccessToken();
 
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 587, // or 465 for SSL
-  secure: false, // true for 465, false for 587
+  port: 465 , // or 465 for SSL
+  secure: true, // true for 465, false for 587
   auth: {
     type: "OAuth2",
     user: process.env.EMAIL_USER,
