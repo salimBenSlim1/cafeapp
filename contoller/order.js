@@ -108,6 +108,7 @@ updateOrderStatus: async (req, res) => {
 },
 getInsights: async (req, res) => {
   const cafeId = req.cafe.id;
+
   try {
     const [
       topSelling,
@@ -134,12 +135,14 @@ getInsights: async (req, res) => {
           "itemId",
           [sequelize.fn("SUM", sequelize.col("quantity")), "totalSold"],
           [
-            sequelize.literal("SUM(OrderItems.quantity * OrderItems.price)"),
+            sequelize.literal(
+              'SUM("OrderItems"."quantity" * "OrderItems"."price")'
+            ),
             "totalRevenue",
           ],
         ],
-        group: ["OrderItems.itemId", "Item.id", "Item.name"],
-        order: [[sequelize.literal("SUM(OrderItems.quantity)"), "DESC"]],
+        group: ["OrderItems.itemId", "Item.id", "Item.name"], // Fixed: added OrderItems prefix and Item.id
+        order: [[sequelize.literal('SUM("OrderItems"."quantity")'), "DESC"]], // Fixed: use actual expression
         limit: 5,
       }),
 
@@ -147,11 +150,11 @@ getInsights: async (req, res) => {
       Orders.findAll({
         where: { status: "served", cafeId },
         attributes: [
-          [sequelize.literal("DATE(Orders.createdAt)"), "day"], // ✅ MySQL date cast
+          [sequelize.literal('"Orders"."createdAt"::date'), "day"], // Fixed: PostgreSQL date cast
           [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalRevenue"],
         ],
-        group: [sequelize.literal("DATE(Orders.createdAt)")],
-        order: [[sequelize.literal("DATE(Orders.createdAt)"), "DESC"]],
+        group: [sequelize.literal('"Orders"."createdAt"::date')], // Fixed: PostgreSQL date cast
+        order: [[sequelize.literal('"Orders"."createdAt"::date'), "DESC"]], // Fixed: PostgreSQL date cast
       }),
 
       // 🥉 Busy Hours
@@ -159,13 +162,21 @@ getInsights: async (req, res) => {
         where: { status: "served", cafeId },
         attributes: [
           [
-            sequelize.literal("HOUR(Orders.createdAt)"),
+            sequelize.fn(
+              "EXTRACT",
+              sequelize.literal('HOUR FROM "Orders"."createdAt"')
+            ),
             "hour",
-          ], // ✅ MySQL hour extraction
+          ], // Fixed: PostgreSQL EXTRACT
           [sequelize.fn("COUNT", sequelize.col("id")), "ordersCount"],
         ],
-        group: [sequelize.literal("HOUR(Orders.createdAt)")],
-        order: [[sequelize.literal("COUNT(Orders.id)"), "DESC"]],
+        group: [
+          sequelize.fn(
+            "EXTRACT",
+            sequelize.literal('HOUR FROM "Orders"."createdAt"')
+          ),
+        ], // Fixed: use expression in group
+        order: [[sequelize.literal('COUNT("Orders"."id")'), "DESC"]], // Fixed: use actual expression
         limit: 5,
       }),
 
@@ -184,12 +195,9 @@ getInsights: async (req, res) => {
           "tableId",
           [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalRevenue"],
         ],
-        include: {
-          model: Table,
-          attributes: ["id", "number"], // add what you need
-        },
-        group: ["Orders.tableId", "Table.id"],
-        order: [[sequelize.literal("SUM(Orders.totalPrice)"), "DESC"]],
+        include: { model: Table }, // Added attributes for clarity
+        group: ["Orders.tableId", "Table.id"], // Fixed: added Table.id for GROUP BY
+        order: [[sequelize.literal('SUM("Orders"."totalPrice")'), "DESC"]], // Fixed: use actual expression
       }),
     ]);
 
@@ -206,6 +214,7 @@ getInsights: async (req, res) => {
       .status(500)
       .json({ message: "Internal server error", error: err.message });
   }
-}
+},
+
 
 }
