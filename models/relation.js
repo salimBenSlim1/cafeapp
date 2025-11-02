@@ -122,9 +122,9 @@ async function initDB() {
 
 
 // Uncomment to run
-// initDB().catch(err => {
-//   console.error('Failed to initialize database:', err);
-//   process.exit(1);
-// });
+initDB().catch(err => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1);
+});
 
 module.exports = { initDB };
