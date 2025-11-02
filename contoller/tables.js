@@ -7,7 +7,7 @@ module.exports = {
       const cafeId = req.cafe.id; // يجي من الـmiddleware متاع التوثيق
       const tables = await Table.findAll({
         where: { cafeId },
-        attributes: ['id', 'number', 'qrCodeURL']
+        attributes: ['id', 'number', 'qrCodeURL','assignedTo']
       });
 
       res.status(200).json(tables);
@@ -28,6 +28,7 @@ module.exports = {
 
  startSession:async(req, res)=> {
   const { key } = req.query;
+  if (!key) return res.status(400).json('key not found')
   const table = await Table.findOne({ where: { qrKey: key } });
   if (!table) return res.status(404).json({ error: "Table introuvable" });
 

@@ -4,7 +4,8 @@ const Item=require('../models/item')
 const Table = require('../models/table')
 const { getIo } = require("../socket");
 const {literal,Op} =require('sequelize')
-const sequelize=require('../db/db-config')
+const sequelize=require('../db/db-config');
+const Cafe = require('../models/cafe');
 
 module.exports={
     addOrder : async (req, res) => {
@@ -46,13 +47,16 @@ module.exports={
         });
       }
     }
-
+    
+    const caffe=await Cafe.findOne({where:{id:cafeId}})
     // 3. Find or create order with proper status check
     const [order, created] = await Order.findOrCreate({
       where: {
         tableId,
         cafeId,
-        status: { [Op.ne]: 'served' }
+        status: {
+    [Op.notIn]: ['served', 'canceled']
+  }
       },
       defaults: {
         totalPrice: 0,
@@ -110,13 +114,13 @@ module.exports={
           }
         )
       );
-
+      
       // Update running total
       total += it.quantity * item.price;
-
+      
       // Check if stock will be low after update
       if (item.stock - it.quantity < 3) {
-        getIo().emit("newAlert", {
+        getIo().to(`cafe_${caffe.id}`).emit("newAlert", {
           name: item.name,
           stock: item.stock - it.quantity
         });
@@ -140,10 +144,11 @@ module.exports={
     await transaction.commit();
 
     // 9. Notify frontend
-    getIo().emit("newOrder", {
+    getIo().to(`cafe_${caffe.id}`).emit("newOrder", {
       ...order.toJSON(),
       items: orderItemsToCreate
     });
+    
 
     return res.status(201).json({
       message: "Order created successfully",

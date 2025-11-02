@@ -28,6 +28,10 @@ const Table = sequelize.define('Table', {
     type: DataTypes.STRING, // lien vers QR
     allowNull: true
   },
+  assignedTo: {
+    type: DataTypes.INTEGER, // lien vers QR
+    allowNull: true
+  },
   cafeId: {
   type: DataTypes.INTEGER,
   references: {

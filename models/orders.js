@@ -13,7 +13,7 @@ const Orders = sequelize.define('Orders', {
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM('pending', 'prepared', 'served'),
+    type: DataTypes.ENUM('pending', 'canceled', 'served'),
     defaultValue: 'pending'
   },
   cafeId: {

@@ -6,6 +6,8 @@ const Item = require('./item');
 const Cafe = require('./cafe');
 const MessagesForm = require('./messagesForm');
 const Payement = require('./paiement');
+const Server = require('./servers');
+const OrderAudit = require('./orderAudit');
 
 // ===== RELATIONS =====
 Table.hasMany(Order, { foreignKey: 'tableId' });
@@ -28,6 +30,19 @@ Item.belongsTo(Cafe, { foreignKey: 'cafeId' });
 Order.belongsTo(Cafe, { foreignKey: 'cafeId' });
 Payement.belongsTo(Cafe, { foreignKey: 'cafeId' });
 
+Cafe.hasMany(Server, { foreignKey: "cafeId" });
+Server.belongsTo(Cafe, { foreignKey: "cafeId" });
+
+// 1 server → many order audits
+Server.hasMany(OrderAudit, { foreignKey: "serverId" });
+OrderAudit.belongsTo(Server, { foreignKey: "serverId" });
+
+// 1 order → many audits
+Order.hasMany(OrderAudit, { foreignKey: "orderId" });
+OrderAudit.belongsTo(Order, { foreignKey: "orderId" });
+
+Cafe.hasMany(OrderAudit, { foreignKey: "cafeId" });
+OrderAudit.belongsTo(Cafe, { foreignKey: "cafeId" });
 // ===== INIT FUNCTION =====
 async function initDB() {
   try {
@@ -81,7 +96,13 @@ async function initDB() {
 
     await MessagesForm.sync({ force: false });
     console.log('✓ MessagesForm table created');
-
+    
+    await Server.sync({ force: false });
+    console.log('✓ Server table created');
+    
+    await OrderAudit.sync({ force: false });
+    console.log('✓ OrderAudit table created');
+    
     console.log('🚀 All models recreated successfully!');
   } catch (error) {
     console.error('❌ DB Error:', error);
