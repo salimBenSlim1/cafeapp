@@ -101,6 +101,9 @@ module.exports={
   }
 
   try {
+    const tb=await Table.findOne({where:{cafeId, number: id}})
+    if (!tb) return res.status(400).json('table not found')
+    console.log(tb)
     const [updatedCount] = await Table.update(
       { assignedTo: parseInt(serverId) },               // ✅ values
       { where: { cafeId, number: id } }       // ✅ condition
