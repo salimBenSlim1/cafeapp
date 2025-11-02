@@ -35,7 +35,7 @@ const userRoute = require("./routes/users");
 const router = require("./routes/cloudinary");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
- origin: ['https://cafeapp-frontend-lij4.vercel.app'],
+ origin: ['http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
