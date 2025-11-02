@@ -75,9 +75,6 @@ async function initDB() {
     
     await Server.drop({ cascade: true });
     console.log('🗑️ Server dropped');
-    
-    await Payement.drop({ cascade: true });
-    console.log('🗑️ Payement dropped');
 
     await Cafe.drop({ cascade: true });
     console.log('🗑️ Cafe dropped');
@@ -122,9 +119,9 @@ async function initDB() {
 
 
 // Uncomment to run
-// initDB().catch(err => {
-//   console.error('Failed to initialize database:', err);
-//   process.exit(1);
-// });
+initDB().catch(err => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1);
+});
 
 module.exports = { initDB };
