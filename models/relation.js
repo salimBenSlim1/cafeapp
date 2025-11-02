@@ -54,6 +54,9 @@ async function initDB() {
     // Drop children first to avoid FK conflicts
     await OrderItems.drop({ cascade: true });
     console.log('🗑️ OrderItems dropped');
+    
+    await OrderAudit.drop({ cascade: true });
+    console.log('🗑️ OrderAudit dropped');
 
     await Order.drop({ cascade: true });
     console.log('🗑️ Orders dropped');
@@ -69,6 +72,12 @@ async function initDB() {
 
     await MessagesForm.drop({ cascade: true });
     console.log('🗑️ MessagesForm dropped');
+    
+    await Server.drop({ cascade: true });
+    console.log('🗑️ Server dropped');
+    
+    await Payement.drop({ cascade: true });
+    console.log('🗑️ Payement dropped');
 
     await Cafe.drop({ cascade: true });
     console.log('🗑️ Cafe dropped');
