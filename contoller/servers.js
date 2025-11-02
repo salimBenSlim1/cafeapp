@@ -102,7 +102,7 @@ module.exports={
 
   try {
     const [updatedCount] = await Table.update(
-      { assignedTo: serverId },               // ✅ values
+      { assignedTo: parseInt(serverId) },               // ✅ values
       { where: { cafeId, number: id } }       // ✅ condition
     );
 
