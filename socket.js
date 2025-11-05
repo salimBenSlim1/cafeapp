@@ -5,7 +5,7 @@ let io;
 function initSocket(server) {
   io = new Server(server, {
     cors: {
-      origin: ["https://cafe-app-backend-i4ec.onrender.com"],
+      origin: ["https://cafeapp-frontend-lij4.vercel.app"],
       methods: ["GET", "POST"],
       credentials: true,
     },
