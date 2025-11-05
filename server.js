@@ -40,7 +40,7 @@ const { refresh, logout } = require("./contoller/cafe");
 const userMiddlware = require("./middleware/userMiddlware");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
- origin: ['http://localhost:3000'],
+ origin: ['https://cafe-app-backend-i4ec.onrender.com'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
