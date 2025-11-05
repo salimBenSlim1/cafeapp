@@ -1,6 +1,7 @@
+const Cafe = require('../models/cafe');
 const Table = require('../models/table');
 const crypto = require("crypto");
-
+const jwt=require('jsonwebtoken')
 module.exports = {
   getQRCodes: async (req, res) => {
     try {
@@ -27,16 +28,43 @@ module.exports = {
 },
 
  startSession:async(req, res)=> {
-  const { key } = req.query;
-  if (!key) return res.status(400).json('key not found')
-  const table = await Table.findOne({ where: { qrKey: key } });
-  if (!table) return res.status(404).json({ error: "Table introuvable" });
+ try {
+    const { key } = req.query;
+    
+    // Find table by QR key
+    const table = await Table.findOne({ where:{qrKey: key} });
+    if (!table) {
+      return res.status(404).json({ error: 'Invalid QR code' });
+    }
 
-  const newToken = crypto.randomBytes(16).toString("hex");
-  table.sessionToken = newToken;
-  await table.save();
+    // Get cafe info
+    const cafe = await Cafe.findOne({where:{id:table.cafeId}});
+    if (!cafe) {
+      return res.status(404).json({ error: 'Cafe not found' });
+    }
 
-  res.json({ token: newToken, tableNumber: table.id,cafeId:table.cafeId,tableId:table.number });
+    // Create JWT token with user role
+    const token = jwt.sign(
+      {
+        role: 'user',
+        tableId: table.id,
+        tableNumber: table.number,
+        cafeId: cafe.id,
+        cafeName: cafe.name,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' } // Session expires after 8 hours
+    );
+
+    res.json({
+      token,
+      cafeId:cafe.id,
+      tableId:table.number
+    });
+  } catch (err) {
+    console.error('Start session error:', err);
+    res.status(500).json({ error: err });
+  }
 }
 
 };

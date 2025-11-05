@@ -99,9 +99,9 @@ module.exports={
   }
 },
 getItemsForUser:async(req,res)=>{
+  const cafeId=req.user.cafeId
   try {
-    if (!req.params.id) return res.status(400).json('no item')
-    const data=await Item.findAll({where:{cafeId:req.params.id}})
+    const data=await Item.findAll({where:{cafeId}})
     if (!data) return res.status(404).json('something went wrong')
     res.status(200).json(data)
 

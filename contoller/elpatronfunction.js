@@ -218,7 +218,7 @@ async function downloadQRCodes (req, res) {
 
 // Fonction principale de provisionnement
 async function provisionTenant(req,res) {
-    const now=new Date()
+const now=new Date()
 const apiKeyExpiresAt = new Date(now)
 apiKeyExpiresAt.setDate(apiKeyExpiresAt.getDate() + 7);
   const password = generatePassword(); // on génère le password ici
@@ -238,7 +238,10 @@ apiKeyExpiresAt.setDate(apiKeyExpiresAt.getDate() + 7);
     apiKey: generateApiKey(),
     password: password, // ajout du password
     apiKeyExpiresAt,
-    verifiedPayment:'0'
+    verifiedPayment:'0',
+    subscriptionStartDate:now,
+    subscriptionEndDate:apiKeyExpiresAt,
+    lastLoginDate:now
   }).then(async(tenant)=>{
       const tablesData = [
   { cafeId: tenant.id, number: 1,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },

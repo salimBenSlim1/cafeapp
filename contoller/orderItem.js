@@ -9,8 +9,9 @@ const Cafe = require('../models/cafe');
 
 module.exports={
     addOrder : async (req, res) => {
-  const { items, cafeId } = req.body;
-  const tableId = req.table.id;
+  const { items } = req.body
+  const cafeId=req.user.cafeId
+  const tableId = req.user.tableId
   const transaction = await sequelize.transaction();
 
   try {

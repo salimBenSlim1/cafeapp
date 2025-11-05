@@ -1,12 +1,15 @@
 const express = require("express")
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const verifyCafe=require('./middleware/cafeMiddlware')
 const orderItems = require('./routes/orderItem');
 const helmet =require('helmet')
+const verifyUser=require('./middleware/userMiddlware')
 // const tenantResolver = require('./middleware/tenantResolver');
 const http = require("http");
 const { initSocket } = require("./socket");
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const cookieParser = require("cookie-parser");
 
 const app = express();
 const server = http.createServer(app);
@@ -33,9 +36,11 @@ const adminMidlware = require("./middleware/adminMidlware");
 const serverRoute = require("./routes/servers");
 const userRoute = require("./routes/users");
 const router = require("./routes/cloudinary");
+const { refresh, logout } = require("./contoller/cafe");
+const userMiddlware = require("./middleware/userMiddlware");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
- origin: ['https://cafeapp-frontend-lij4.vercel.app'],
+ origin: ['http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -47,6 +52,7 @@ app.use(cors({
 
 app.use(express.json())
 app.use(bodyParser.json());
+app.use(cookieParser());
 
 // Configure Helmet with custom CSP for WebSocket
 // app.use(helmet({
@@ -72,7 +78,7 @@ app.use(bodyParser.json());
 // app.use(tenantResolver);
 
 // API routes should be defined BEFORE the proxy middleware
-app.use("/api", verifyApiKey);
+app.use("/api", verifyCafe);
 app.use('/',messageFormRoute)
 app.use('/',cafeRoute)
 app.use('/api',orderItems)
@@ -86,9 +92,9 @@ app.use('/api',chartRoute)
 app.use('/api',paymentRouter)
 app.post('/addOrder',
   // orderLimiter,
-verifyTableSession,
+verifyUser,
   addOrder)
-app.get('/getUserItems/:id',getItemsForUser)
+app.get('/getUserItems',verifyUser,getItemsForUser)
 app.get('/start-session',startSession)
 app.post('/pay',pay)
 app.post('/createUserPayment',adminMidlware,createPaymentForCoffe)
@@ -112,6 +118,8 @@ app.use('/api',router)
 
 // Apply global rate limiter to all routes
 // app.use(globalLimiter);
+app.post('/refresh',refresh)
+app.post('/logout',logout)
 server.listen(5000,"0.0.0.0",()=>{
     console.log('connected')
 })

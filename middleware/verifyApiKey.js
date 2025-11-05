@@ -27,7 +27,7 @@ module.exports = async function verifyApiKey(req, res, next) {
       return res.status(401).json({ redirectTo: "https://cafeapp-frontend-lij4.vercel.app/login" });
 
     }
-
+    console.log(cafe)
     // Attach cafe info for later use
     req.cafe = cafe;
     next();
