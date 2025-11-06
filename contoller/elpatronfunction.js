@@ -272,9 +272,9 @@ async function provisionTenant(req, res) {
 
     // ☕ Default items
     await Item.bulkCreate([
-      { cafeId: tenant.id, name: 'Cappuccin', price: 15, category: 'Coffee', imageUrl: '/images/cappucin.jpg', stock: 10 },
-      { cafeId: tenant.id, name: 'Directe', price: 12, category: 'Coffee', imageUrl: '/images/cafecreme.jpg', stock: 10 },
-      { cafeId: tenant.id, name: 'Pathé', price: 8, category: 'Food', imageUrl: '/images/pathé.jpg', stock: 10 },
+      { cafeId: tenant.id, name: 'Cappuccin', price: 15, category: 'coffee', imageUrl: '/images/cappucin.jpg', stock: 10 },
+      { cafeId: tenant.id, name: 'Directe', price: 12, category: 'coffee', imageUrl: '/images/cafecreme.jpg', stock: 10 },
+      { cafeId: tenant.id, name: 'Pathé', price: 8, category: 'food', imageUrl: '/images/pathé.jpg', stock: 10 },
     ]);
 
     // 📸 Generate QR codes
