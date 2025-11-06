@@ -6,7 +6,8 @@ const Orders = require("../models/orders");
 const OrderItems = require("../models/orderItems");
 const Payement = require("../models/paiement");
 const Table = require("../models/table");
-const jwt=require('jsonwebtoken')
+const jwt=require('jsonwebtoken');
+const Server = require("../models/servers");
 module.exports={
     login:async(req, res) => {
   const { email, password } = req.body;
@@ -83,7 +84,7 @@ const cafe = await Cafe.findOne({ where: { email } });
       // 🧾 Step 5: Delete items & tables
       await Item.destroy({ where: { cafeId: id } });
       await Table.destroy({ where: { cafeId: id } });
-
+      await Server.destroy({where:{cafeId:id}})
       // 🧾 Step 6: Finally, delete the café itself
       await Cafe.destroy({ where: { id } });
 
