@@ -215,67 +215,73 @@ async function downloadQRCodes (req, res) {
 
 
 // Génère un mot de passe aléatoire sécurisé
+async function provisionTenant(req, res) {
+  try {
+    const now = new Date();
+    const apiKeyExpiresAt = new Date(now);
+    apiKeyExpiresAt.setDate(apiKeyExpiresAt.getDate() + 7);
 
-// Fonction principale de provisionnement
-async function provisionTenant(req,res) {
-const now=new Date()
-const apiKeyExpiresAt = new Date(now)
-apiKeyExpiresAt.setDate(apiKeyExpiresAt.getDate() + 7);
-  const password = generatePassword(); // on génère le password ici
-  const f=await Cafe.findOne({
-    where:{email:req.body.email}
-  })
-  if (f){
-    return res.status(400).json('email exist')
-  }
-  if (!req.body.cafeName||!req.body.email||!req.body.plan){
-    return res.status(400).json('invalid details')
-  }
-  const tenant = await Cafe.create({
-    name: req.body.cafeName,
-    email: req.body.email,
-    plan: req.body.plan,
-    apiKey: generateApiKey(),
-    password: password, // ajout du password
-    apiKeyExpiresAt,
-    verifiedPayment:'0',
-    subscriptionStartDate:now,
-    subscriptionEndDate:apiKeyExpiresAt,
-    lastLoginDate:now
-  }).then(async(tenant)=>{
-      const tablesData = [
-  { cafeId: tenant.id, number: 1,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 2 ,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-  { cafeId: tenant.id, number: 3,status:'libre' ,sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-  { cafeId: tenant.id, number: 4 ,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-  { cafeId: tenant.id, number: 5 ,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-  { cafeId: tenant.id, number: 6 ,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-  { cafeId: tenant.id, number: 7 ,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-  { cafeId: tenant.id, number: 8 ,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-  { cafeId: tenant.id, number: 9 ,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-  { cafeId: tenant.id, number: 10,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 11,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 12,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 13,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 14,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 15,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 16,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 17,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 18,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 19,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex") },
-  { cafeId: tenant.id, number: 20,status:'libre',sessionToken:crypto.randomBytes(16).toString("hex"),qrKey:crypto.randomBytes(16).toString("hex")},
-];
+    const password = generatePassword();
 
-await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
+    // 🧩 Check required fields
+    if (!req.body.cafeName || !req.body.email || !req.body.plan) {
+      return res.status(400).json('invalid details');
+    }
 
+    // 🧩 Check if email already exists
+    const existing = await Cafe.findOne({ where: { email: req.body.email } });
+    if (existing) {
+      return res.status(400).json('email exist');
+    }
+
+    // ⚙️ Determine number of tables based on plan
+    let numberOfTables = 20; // default basic
+    if (req.body.plan === 'pro') numberOfTables = 50;
+    if (req.body.plan === 'custom' && req.body.customTables) {
+      console.log(req.body.customTables,'aaa')
+      numberOfTables = parseInt(req.body.customTables);
+      if (isNaN(numberOfTables) || numberOfTables < 1) {
+        return res.status(400).json('invalid custom table number');
+      }
+    }
+
+    // 🏠 Create tenant
+    const tenant = await Cafe.create({
+      name: req.body.cafeName,
+      email: req.body.email,
+      plan: req.body.plan,
+      apiKey: generateApiKey(),
+      password,
+      apiKeyExpiresAt,
+      verifiedPayment: '0',
+      subscriptionStartDate: now,
+      subscriptionEndDate: apiKeyExpiresAt,
+      lastLoginDate: now
+    });
+
+    // 🪑 Generate tables dynamically
+    const tablesData = Array.from({ length: numberOfTables }, (_, i) => ({
+      cafeId: tenant.id,
+      number: i + 1,
+      status: 'libre',
+      sessionToken: crypto.randomBytes(16).toString('hex'),
+      qrKey: crypto.randomBytes(16).toString('hex'),
+    }));
+
+    await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
+
+    // ☕ Default items
     await Item.bulkCreate([
-      { cafeId: tenant.id, name: 'Cappuccin', price: 15, category: 'Coffee',imageUrl:'/images/cappucin.jpg',stock:10 },
-      { cafeId: tenant.id, name: 'Directe', price: 12, category: 'Coffee',imageUrl:'/images/cafecreme.jpg',stock:10 },
-      { cafeId: tenant.id, name: 'Pathé', price: 8, category: 'Food',imageUrl:'/images/pathé.jpg' ,stock:10},
+      { cafeId: tenant.id, name: 'Cappuccin', price: 15, category: 'Coffee', imageUrl: '/images/cappucin.jpg', stock: 10 },
+      { cafeId: tenant.id, name: 'Directe', price: 12, category: 'Coffee', imageUrl: '/images/cafecreme.jpg', stock: 10 },
+      { cafeId: tenant.id, name: 'Pathé', price: 8, category: 'Food', imageUrl: '/images/pathé.jpg', stock: 10 },
     ]);
-    
-    const data=await generateQRForTables(tenant.id,req.body.domaine);
-  //  const accessToken = await oauth2Client.getAccessToken();
+
+    // 📸 Generate QR codes
+    const data = await generateQRForTables(tenant.id, req.body.domaine);
+
+    // (Optional) Send welcome email later
+    //  const accessToken = await oauth2Client.getAccessToken();
 
   //   const transporter = nodemailer.createTransport({
   //     service: 'gmail',
@@ -288,11 +294,11 @@ await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
   //       accessToken: accessToken.token,
   //     },
   //   });
- const oAuth2Client = new google.auth.OAuth2(
-   process.env.CLIENT_ID,
-  process.env.CLIENT_SECRET,
-  'https://developers.google.com/oauthplayground' // redirect URI
-);
+//  const oAuth2Client = new google.auth.OAuth2(
+//    process.env.CLIENT_ID,
+//   process.env.CLIENT_SECRET,
+//   'https://developers.google.com/oauthplayground' // redirect URI
+// );
 
 // oAuth2Client.setCredentials({ refresh_token: process.env.REFRESH_TOKEN });
 
@@ -353,18 +359,15 @@ await Table.bulkCreate(tablesData, { validate: true, ignoreDuplicates: true });
    
 
 //     await transporter.sendMail(mailOptions);
-    return res.status(200).json(tenant,password,data)
-  })
-
-  // 🪑 Tables par défaut
-
-  // ☕ Produits par défaut
-
-  // 📸 Génération QR
-
-  // 👤 Création admin
-  
+    return res.status(200).json({ tenant, password, tables: numberOfTables, qr: data });
+  } catch (err) {
+    console.error('Error provisioning tenant:', err);
+    return res.status(500).json('internal error');
+  }
 }
+
+// Fonction principale de provisionnement
+
 async function authAdmin(req,res){
   try {
     if (req.body.email==="salimbenslim@outgmail.com"&&req.body.password==="eWFhdGlrc2FoYTEyM2FpemVmYmFpemV1ZmJpYXpldWJmYWl6ZXViZg=="){

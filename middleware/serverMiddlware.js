@@ -14,7 +14,6 @@ module.exports = async function verifyServer(req, res, next) {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log(decoded)
     // Check if the user is admin (for example, email or role)
     if (!decoded || decoded.role !== "server") {
       return res.status(403).json({

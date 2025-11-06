@@ -1,7 +1,7 @@
 const express = require("express")
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const verifyCafe=require('./middleware/cafeMiddlware')
+const verifyCafe=require('./middleware/cafeMiddlwareBasic')
 const orderItems = require('./routes/orderItem');
 const helmet =require('helmet')
 const verifyUser=require('./middleware/userMiddlware')

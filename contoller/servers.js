@@ -80,7 +80,7 @@ module.exports={
         if (!id||!number) return res.status(400).json('err')
         try {
             const data=await Table.update(
-                { assignedTo: '' },               // ✅ values
+                { assignedTo: null },               // ✅ values
       { where: { cafeId, assignedTo:id,number } } 
     )
             if (!data) return res.status(400).json('something wrong')
