@@ -6,7 +6,7 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'mysiibit', // Dossier dans Cloudinary
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp','avif'],
     transformation: [
       { width: 800, height: 800, crop: 'limit' }, // Resize
       { quality: 'auto' } // Compression automatique
