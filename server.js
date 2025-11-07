@@ -102,15 +102,7 @@ app.post('/createUserPayment',adminMidlware,createPaymentForCoffe)
 app.delete('/deleteUserPayment/:id',adminMidlware,deletePaymentForCoffe)
 app.get('/getPayements',adminMidlware,getCoffePayments)
 app.use('/api',router)
-async function resetAssigned() {
-  await Table.update(
-    { assignedTo: null },
-    { where: { cafeId: 2 } }
-  );
-  console.log("Updated successfully!");
-}
 
-resetAssigned();
 
 // Proxy middleware for frontend - handle non-API routes
 // app.use('/', createProxyMiddleware({
