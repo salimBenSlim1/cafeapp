@@ -38,6 +38,7 @@ const userRoute = require("./routes/users");
 const router = require("./routes/cloudinary");
 const { refresh, logout } = require("./contoller/cafe");
 const userMiddlware = require("./middleware/userMiddlware");
+const Table = require("./models/table");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
  origin: ['https://cafeapp-frontend-lij4.vercel.app'],
@@ -91,7 +92,7 @@ app.use('/api',tableRoute)
 app.use('/api',chartRoute)
 app.use('/api',paymentRouter)
 app.post('/addOrder',
-  // orderLimiter,
+  orderLimiter,
 verifyUser,
   addOrder)
 app.get('/getUserItems',verifyUser,getItemsForUser)
@@ -101,6 +102,16 @@ app.post('/createUserPayment',adminMidlware,createPaymentForCoffe)
 app.delete('/deleteUserPayment/:id',adminMidlware,deletePaymentForCoffe)
 app.get('/getPayements',adminMidlware,getCoffePayments)
 app.use('/api',router)
+async function resetAssigned() {
+  await Table.update(
+    { assignedTo: null },
+    { where: { cafeId: 2 } }
+  );
+  console.log("Updated successfully!");
+}
+
+resetAssigned();
+
 // Proxy middleware for frontend - handle non-API routes
 // app.use('/', createProxyMiddleware({
 //     target: 'http://localhost:3000',
