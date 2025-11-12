@@ -47,6 +47,12 @@ module.exports={
         const cafeId=req.cafe.id
         const {id}=req.params
         try {
+            const tbs=await Table.findAll({where:{cafeId,assignedTo:id}})
+            for (const tb of tbs){
+            tb.assignedTo=null
+            tb.save()
+
+            }
             const data=await Server.destroy({where:{cafeId,id}})
             if (!data) return res.status(400).json('something wrong')
             res.status(200).json('server deleted')

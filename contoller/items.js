@@ -1,3 +1,4 @@
+const Cafe = require("../models/cafe")
 const Item = require("../models/item")
 const OrderItems = require("../models/orderItems")
 const Orders = require("../models/orders")
@@ -101,7 +102,15 @@ module.exports={
 getItemsForUser:async(req,res)=>{
   const cafeId=req.user.cafeId
   try {
-    const data=await Item.findAll({where:{cafeId}})
+const data = await Item.findAll({
+  where: { cafeId },
+  include: [
+    {
+      model: Cafe,        // your Cafe model
+      attributes: ['name'] // optional: select specific columns
+    }
+  ]
+});
     if (!data) return res.status(404).json('something went wrong')
     res.status(200).json(data)
 
