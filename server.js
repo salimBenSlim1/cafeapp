@@ -122,40 +122,22 @@ app.use('/api',router)
 
 // Apply global rate limiter to all routes
 // app.use(globalLimiter);
-async function ensureOrderItemsExists() {
+app.get("/debug-tables", async (req, res) => {
   try {
-    const [tables] = await sequelize.query(`
-      SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+    const [results] = await sequelize.query(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema='public';
     `);
 
-    const names = tables.map(t => t.table_name);
-
-    if (!names.includes("OrderItems")) {
-      console.log("⚠️ OrderItems not found → Creating it...");
-
-      await sequelize.query(`
-        CREATE TABLE "OrderItems" (
-          id SERIAL PRIMARY KEY,
-          quantity INTEGER NOT NULL,
-          price FLOAT NOT NULL,
-          comment TEXT,
-          "orderId" INTEGER,
-          "itemId" INTEGER
-        );
-      `);
-
-      console.log("✅ OrderItems table created successfully!");
-    } else {
-      console.log("✔️ OrderItems already exists in DB.");
-    }
-
+    res.json(results);
   } catch (err) {
-    console.error("❌ Error creating OrderItems:", err);
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
-}
+});
 
-ensureOrderItemsExists();
-
+addCommentColumn();
 app.post('/refresh',refresh)
 app.post('/logout',logout)
 server.listen(5000,"0.0.0.0",()=>{
