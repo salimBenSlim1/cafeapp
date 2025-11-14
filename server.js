@@ -122,21 +122,51 @@ app.use('/api',router)
 
 // Apply global rate limiter to all routes
 // app.use(globalLimiter);
-async function addCommentColumn() {
+async function fixOrderItemsTable() {
   try {
-    await sequelize.query(`
-      ALTER TABLE OrderItems
-      ADD COLUMN comment TEXT;
+    // Check if table exists
+    const [results] = await sequelize.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public';
     `);
 
-    console.log("✅ Comment column added!");
-    process.exit();
+    const tables = results.map(t => t.table_name.toLowerCase());
+
+    // CASE 1: table موجود لكن LOWERCASE اسمو غلط
+    if (tables.includes('orderitems') && !tables.includes('OrderItems')) {
+
+      console.log("⚠️ Renaming orderitems → OrderItems ...");
+
+      await sequelize.query(`
+        ALTER TABLE orderitems RENAME TO "OrderItems";
+      `);
+
+      console.log("✅ Table renamed successfully");
+    }
+
+    // CASE 2: table مش موجود أصلاً (rare)
+    if (!tables.includes('orderitems') && !tables.includes('OrderItems')) {
+
+      console.log("⚠️ Creating missing OrderItems table...");
+
+      await sequelize.query(`
+        CREATE TABLE "OrderItems" (
+          id SERIAL PRIMARY KEY,
+          quantity INTEGER NOT NULL,
+          price FLOAT NOT NULL,
+          comment TEXT
+        );
+      `);
+
+      console.log("✅ Table created successfully");
+    }
+
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error fixing OrderItems table:", err);
   }
 }
-
-addCommentColumn();
+fixOrderItemsTable()
 app.post('/refresh',refresh)
 app.post('/logout',logout)
 server.listen(5000,"0.0.0.0",()=>{
