@@ -122,51 +122,40 @@ app.use('/api',router)
 
 // Apply global rate limiter to all routes
 // app.use(globalLimiter);
-async function fixOrderItemsTable() {
+async function ensureOrderItemsExists() {
   try {
-    // Check if table exists
-    const [results] = await sequelize.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public';
+    const [tables] = await sequelize.query(`
+      SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
     `);
 
-    const tables = results.map(t => t.table_name.toLowerCase());
+    const names = tables.map(t => t.table_name);
 
-    // CASE 1: table موجود لكن LOWERCASE اسمو غلط
-    if (tables.includes('orderitems') && !tables.includes('OrderItems')) {
-
-      console.log("⚠️ Renaming orderitems → OrderItems ...");
-
-      await sequelize.query(`
-        ALTER TABLE orderitems RENAME TO "OrderItems";
-      `);
-
-      console.log("✅ Table renamed successfully");
-    }
-
-    // CASE 2: table مش موجود أصلاً (rare)
-    if (!tables.includes('orderitems') && !tables.includes('OrderItems')) {
-
-      console.log("⚠️ Creating missing OrderItems table...");
+    if (!names.includes("OrderItems")) {
+      console.log("⚠️ OrderItems not found → Creating it...");
 
       await sequelize.query(`
         CREATE TABLE "OrderItems" (
           id SERIAL PRIMARY KEY,
           quantity INTEGER NOT NULL,
           price FLOAT NOT NULL,
-          comment TEXT
+          comment TEXT,
+          "orderId" INTEGER,
+          "itemId" INTEGER
         );
       `);
 
-      console.log("✅ Table created successfully");
+      console.log("✅ OrderItems table created successfully!");
+    } else {
+      console.log("✔️ OrderItems already exists in DB.");
     }
 
   } catch (err) {
-    console.error("❌ Error fixing OrderItems table:", err);
+    console.error("❌ Error creating OrderItems:", err);
   }
 }
-fixOrderItemsTable()
+
+ensureOrderItemsExists();
+
 app.post('/refresh',refresh)
 app.post('/logout',logout)
 server.listen(5000,"0.0.0.0",()=>{
