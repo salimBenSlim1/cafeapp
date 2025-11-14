@@ -137,7 +137,6 @@ app.get("/debug-tables", async (req, res) => {
   }
 });
 
-addCommentColumn();
 app.post('/refresh',refresh)
 app.post('/logout',logout)
 server.listen(5000,"0.0.0.0",()=>{
