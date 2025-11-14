@@ -66,7 +66,7 @@ module.exports={
       where:{cafeId:req.server.cafeId},
       include: [
         {
-          model: OrderItems,attributes:['id','quantity','price'],
+          model: OrderItems,attributes:['id','quantity','price','comment'],
           include: [{ model: Item,attributes:['name','imageUrl'] }],
         },
         {model:Table,attributes:['number']}

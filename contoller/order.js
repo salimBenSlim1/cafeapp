@@ -14,7 +14,7 @@ getAllOrders: async (req, res) => {
       where:{cafeId:req.cafe.id},
       include: [
         {
-          model: OrderItems,attributes:['id','quantity','price'],
+          model: OrderItems,attributes:['id','quantity','price','comment'],
           include: [{ model: Item,attributes:['name','imageUrl'] }],
         },
         {model:Table,attributes:['number']}

@@ -9,7 +9,7 @@ const Cafe = require('../models/cafe');
 
 module.exports={
     addOrder : async (req, res) => {
-  const { items } = req.body
+  const { items,comment } = req.body
   const cafeId=req.user.cafeId
   const tableId = req.user.tableId
   const transaction = await sequelize.transaction();
@@ -95,7 +95,8 @@ module.exports={
           quantity: it.quantity,
           price: item.price,
           itemId: item.id,
-          orderId: order.id
+          orderId: order.id,
+          comment
         });
       }
 
