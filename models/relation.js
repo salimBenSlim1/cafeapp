@@ -8,7 +8,7 @@ const MessagesForm = require('./messagesForm');
 const Payement = require('./paiement');
 const Server = require('./servers');
 const OrderAudit = require('./orderAudit');
-
+const Printer=require('./printers')
 // ===== RELATIONS =====
 Table.hasMany(Order, { foreignKey: 'tableId' });
 Order.belongsTo(Table, { foreignKey: 'tableId' });
@@ -43,6 +43,9 @@ OrderAudit.belongsTo(Order, { foreignKey: "orderId" });
 
 Cafe.hasMany(OrderAudit, { foreignKey: "cafeId" });
 OrderAudit.belongsTo(Cafe, { foreignKey: "cafeId" });
+
+Cafe.hasMany(Printer,{foreignKey:"cafeId"})
+Printer.belongsTo(Cafe,{foreignKey:"cafeId"})
 // ===== INIT FUNCTION =====
 async function initDB() {
   try {
@@ -116,7 +119,21 @@ async function initDB() {
     throw error;
   }
 }
+async function initPrinterModel() {
+  try {
+    await sequelize.authenticate();
+    console.log('✅ Database connected!');
 
+    // Sync Printer only, without dropping existing tables
+    await Printer.sync({ alter: true }); // alter: true updates table to match model without deleting data
+    console.log('✅ Printer table created/updated safely!');
+  } catch (error) {
+    console.error('❌ Error initializing Printer table:', error);
+  }
+}
+
+// Run once
+initPrinterModel();
 
 // Uncomment to run
 // initDB().catch(err => {
