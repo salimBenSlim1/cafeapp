@@ -17,12 +17,19 @@ PrinterRouter.get('/printers', async (req, res) => {
 
 // Get a single printer by id
 // Create a new printer
+function isValidIP(ip) {
+  // Basic IPv4 validation
+  const regex = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+  return regex.test(ip);
+}
 PrinterRouter.post('/addPrinter', async (req, res) => {
   try {
     const { ipAddress, type } = req.body;
     const cafeId=req.cafe.id
     // Optional: validate cafe exists
-
+ if (!isValidIP(ipAddress)) {
+      return res.status(400).json({ error: 'Invalid IP address format' });
+    }
     const newPrinter = await Printer.create({ ipAddress, type, cafeId });
     res.status(201).json(newPrinter);
   } catch (error) {
