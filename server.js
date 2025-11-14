@@ -122,21 +122,22 @@ app.use('/api',router)
 
 // Apply global rate limiter to all routes
 // app.use(globalLimiter);
-app.get("/debug-tables", async (req, res) => {
+async function addCommentColumn() {
   try {
-    const [results] = await sequelize.query(`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema='public';
-    `);
+    await sequelize.query(`
+  ALTER TABLE "OrderItems"
+  ADD COLUMN comment TEXT;
+`);
 
-    res.json(results);
+
+    console.log("✅ Comment column added!");
+    process.exit();
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
   }
-});
+}
 
+addCommentColumn();
 app.post('/refresh',refresh)
 app.post('/logout',logout)
 server.listen(5000,"0.0.0.0",()=>{
