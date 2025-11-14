@@ -4,6 +4,7 @@ const cors = require('cors');
 const verifyCafe=require('./middleware/cafeMiddlwareBasic')
 const orderItems = require('./routes/orderItem');
 const helmet =require('helmet')
+const sequelize=require('./db/db-config')
 const verifyUser=require('./middleware/userMiddlware')
 // const tenantResolver = require('./middleware/tenantResolver');
 const http = require("http");
@@ -121,6 +122,21 @@ app.use('/api',router)
 
 // Apply global rate limiter to all routes
 // app.use(globalLimiter);
+async function addCommentColumn() {
+  try {
+    await sequelize.query(`
+      ALTER TABLE OrderItems
+      ADD COLUMN comment TEXT;
+    `);
+
+    console.log("✅ Comment column added!");
+    process.exit();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+addCommentColumn();
 app.post('/refresh',refresh)
 app.post('/logout',logout)
 server.listen(5000,"0.0.0.0",()=>{

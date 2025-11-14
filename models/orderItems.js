@@ -15,6 +15,10 @@ const OrderItems = sequelize.define("OrderItems", {
     type: DataTypes.FLOAT,
     allowNull: false,
   },
+  comment: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
   
 });
 
