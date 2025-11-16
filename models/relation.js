@@ -133,7 +133,7 @@ async function initPrinterModel() {
 }
 
 // Run once
-// initPrinterModel();
+initPrinterModel();
 
 // Uncomment to run
 // initDB().catch(err => {
