@@ -94,18 +94,17 @@ app.use('/api',chartRoute)
 app.use('/api',paymentRouter)
 app.post('/addOrder',
   orderLimiter,
-verifyUser,
+  verifyUser,
   addOrder)
-app.get('/getUserItems',verifyUser,getItemsForUser)
-app.get('/start-session',startSession)
-app.post('/pay',pay)
-app.post('/createUserPayment',adminMidlware,createPaymentForCoffe)
-app.delete('/deleteUserPayment/:id',adminMidlware,deletePaymentForCoffe)
-app.get('/getPayements',adminMidlware,getCoffePayments)
-app.use('/api',router)
-app.use('/api',PrinterRouter)
-
-
+  app.get('/getUserItems',verifyUser,getItemsForUser)
+  app.get('/start-session',startSession)
+  app.post('/pay',pay)
+  app.post('/createUserPayment',adminMidlware,createPaymentForCoffe)
+  app.delete('/deleteUserPayment/:id',adminMidlware,deletePaymentForCoffe)
+  app.get('/getPayements',adminMidlware,getCoffePayments)
+  app.use('/api',router)
+  app.use('/api',PrinterRouter)
+  
 // Proxy middleware for frontend - handle non-API routes
 // app.use('/', createProxyMiddleware({
 //     target: 'http://localhost:3000',
@@ -126,6 +125,9 @@ app.use('/api',PrinterRouter)
 
 app.post('/refresh',refresh)
 app.post('/logout',logout)
+
+
+
 server.listen(5000,"0.0.0.0",()=>{
     console.log('connected')
 })

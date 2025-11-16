@@ -1,0 +1,7 @@
+{
+  "Microsoft Print to PDF": {
+    "type": "ip",
+    "host": "PORTPROMPT:",
+    "port": 9100
+  }
+}
