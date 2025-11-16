@@ -15,7 +15,7 @@ getAllOrders: async (req, res) => {
       include: [
         {
           model: OrderItems,attributes:['id','quantity','price','comment'],
-          include: [{ model: Item,attributes:['name','imageUrl'] }],
+          include: [{ model: Item,attributes:['name','imageUrl','category'] }],
         },
         {model:Table,attributes:['number']}
       ],

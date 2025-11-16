@@ -39,6 +39,7 @@ const router = require("./routes/cloudinary");
 const { refresh, logout } = require("./contoller/cafe");
 const userMiddlware = require("./middleware/userMiddlware");
 const Table = require("./models/table");
+const PrinterRouter = require("./routes/printers");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
  origin: ['https://cafeapp-frontend-lij4.vercel.app'],
@@ -102,7 +103,7 @@ app.post('/addOrder',
   app.delete('/deleteUserPayment/:id',adminMidlware,deletePaymentForCoffe)
   app.get('/getPayements',adminMidlware,getCoffePayments)
   app.use('/api',router)
-  
+  app.use('/api',PrinterRouter)
 // Proxy middleware for frontend - handle non-API routes
 // app.use('/', createProxyMiddleware({
 //     target: 'http://localhost:3000',
