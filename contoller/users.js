@@ -478,12 +478,13 @@ addOrderForTable: async (req, res) => {
 
     // Find table assigned to this server
     const table = await Table.findOne({
-      where: { 
-        number: tableNumber,
-        cafeId,
-        assignedTo: serverId
-      }
-    });
+  where: { 
+    number: String(tableNumber),
+    cafeId: String(cafeId),
+    assignedTo: String(serverId)
+  }
+});
+
 
     if (!table) {
       await transaction.rollback();
