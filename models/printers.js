@@ -7,17 +7,7 @@ const Printer = sequelize.define('Printer', {
       primaryKey: true,
       autoIncrement: true
     },
-   
-    ipAddress: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true,
-      validate: {
-        isIP: true
-      }
-    },
-    
-    type: {
+   type: {
       type: DataTypes.ENUM('bar', 'chicha', 'cuisine', 'dessert', 'caisse'),
       allowNull: false
     },

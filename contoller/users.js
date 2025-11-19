@@ -6,8 +6,8 @@ const Orders = require("../models/orders");
 const OrderItems = require("../models/orderItems");
 const Item = require("../models/item");
 const OrderAudit = require("../models/orderAudit");
-const { Op } = require("sequelize");
-
+const { Op,literal } = require("sequelize");
+const sequelize=require('../db/db-config')
 module.exports={
 
 
@@ -461,6 +461,197 @@ generateServerReport: async (req, res) => {
       error: "Server error while generating report",
       details: error.message 
     });
+  }
+},
+// In your server routes file
+addOrderForTable: async (req, res) => {
+  const { tableNumber, items } = req.body;
+  const serverId = req.server.serverId; // from server token
+  const cafeId = req.server.cafeId;
+  const transaction = await sequelize.transaction();
+
+  try {
+    // Validate input
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Invalid items array' });
+    }
+
+    // Find table assigned to this server
+    const table = await Table.findOne({
+      where: { 
+        number: tableNumber,
+        cafeId,
+        assignedTo: serverId
+      }
+    });
+
+    if (!table) {
+      await transaction.rollback();
+      return res.status(403).json({ 
+        error: 'This table is not assigned to you'
+      });
+    }
+
+    // Pre-fetch all items with stock check
+    const itemIds = items.map(it => it.itemId);
+    const existingItems = await Item.findAll({
+      where: { 
+        id: itemIds,
+        cafeId
+      },
+      lock: transaction.LOCK.UPDATE,
+      transaction
+    });
+
+    // Validate stock
+    const itemMap = new Map(existingItems.map(item => [item.id, item]));
+    for (const orderItem of items) {
+      const item = itemMap.get(orderItem.itemId);
+      if (!item) {
+        await transaction.rollback();
+        return res.status(404).json({ 
+          error: `Item ${orderItem.itemId} not found`
+        });
+      }
+      if (item.stock < orderItem.quantity) {
+        await transaction.rollback();
+        return res.status(400).json({
+          error: `Insufficient stock for ${item.name}. Available: ${item.stock}`
+        });
+      }
+    }
+
+    // Find or create order
+    const [order, created] = await Orders.findOrCreate({
+      where: {
+        tableId: table.id,
+        cafeId,
+        status: {
+          [Op.notIn]: ['served', 'canceled']
+        }
+      },
+      defaults: {
+        totalPrice: 0,
+        status: 'pending'
+      },
+      transaction
+    });
+
+    // Process items
+    let total = order.totalPrice || 0;
+    const orderItemsToCreate = [];
+    const stockUpdates = [];
+
+    for (const it of items) {
+      const item = itemMap.get(it.itemId);
+      
+      let orderItem = await OrderItems.findOne({
+        where: {
+          orderId: order.id,
+          itemId: it.itemId
+        },
+        transaction
+      });
+
+      const newQuantity = orderItem ? orderItem.quantity + it.quantity : it.quantity;
+
+      if (orderItem) {
+        await orderItem.update({
+          quantity: newQuantity,
+          comment: it.comment || orderItem.comment
+        }, { transaction });
+      } else {
+        orderItemsToCreate.push({
+          quantity: it.quantity,
+          price: item.price,
+          itemId: item.id,
+          orderId: order.id,
+          comment: it.comment || ''
+        });
+      }
+
+      stockUpdates.push(
+        Item.update(
+          { 
+            stock: literal(`stock - ${it.quantity}`),
+            updatedAt: new Date()
+          },
+          { 
+            where: { 
+              id: it.itemId,
+              stock: { [Op.gte]: it.quantity }
+            },
+            transaction
+          }
+        )
+      );
+      
+      total += it.quantity * item.price;
+      
+      if (item.stock - it.quantity < 3) {
+        getIo().to(`cafe_${cafeId}`).emit("newAlert", {
+          name: item.name,
+          stock: item.stock - it.quantity
+        });
+      }
+    }
+
+    if (orderItemsToCreate.length > 0) {
+      await OrderItems.bulkCreate(orderItemsToCreate, { transaction });
+    }
+
+    await Promise.all(stockUpdates);
+    await order.update({ totalPrice: total }, { transaction });
+    await transaction.commit();
+
+    // Emit socket event
+    getIo().to(`cafe_${cafeId}`).emit("newOrder", {
+      ...order.toJSON(),
+      items: orderItemsToCreate
+    });
+
+    return res.status(201).json({
+      message: "Order added successfully",
+      orderId: order.id
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Order creation error:', error);
+    return res.status(500).json({
+      error: "Internal server error",
+      message: error.message
+    });
+  }
+},
+
+
+getItems: async (req, res) => {
+  try {
+    const cafeId = req.server.cafeId;
+    const items = await Item.findAll({
+      where: { 
+        cafeId
+      }
+    });
+    res.status(200).json(items);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+},
+getTables: async (req, res) => {
+  try {
+    const cafeId = req.server.cafeId;
+    const serverId=req.server.serverId
+    const items = await Table.findAll({
+      where: { 
+        cafeId,
+        assignedTo:serverId
+      }
+    });
+    res.status(200).json(items);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 },
 
