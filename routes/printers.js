@@ -1,70 +1,144 @@
 const express = require('express');
-const PrinterRouter = express.Router();
-const Printer = require('../models/printers');
-const Cafe = require('../models/cafe');
+const router = express.Router();
+const  verifyServer  = require('../middleware/serverMiddlware');
+const PrinterConfiguration = require('../models/printers');
 
-// Get all printers (optionally by cafeId)
-PrinterRouter.get('/printers', async (req, res) => {
-  try {
-    const { id } = req.cafe;
-    const printers = await Printer.findAll({ where:{cafeId:id} });
-    res.json(printers);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to fetch printers' });
-  }
-});
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
-// Get a single printer by id
-// Create a new printer
-function isValidIP(ip) {
-  // Basic IPv4 validation
-  const regex = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
-  return regex.test(ip);
+// ============================================
+// LOAD PRIVATE KEY
+// ============================================
+// Make sure your key.pem file is in the correct location
+const PRIVATE_KEY_PATH = path.join(__dirname, 'key.pem');
+
+let PRIVATE_KEY;
+try {
+  PRIVATE_KEY = fs.readFileSync(PRIVATE_KEY_PATH, 'utf8');
+  console.log('✅ Private key loaded successfully');
+  console.log('Key preview:', PRIVATE_KEY.substring(0, 50) + '...');
+} catch (error) {
+  console.error('❌ Failed to load private key:', error);
+  process.exit(1);
 }
-PrinterRouter.post('/addPrinter', async (req, res) => {
+
+// ============================================
+// SIGN ENDPOINT - FIXED FOR QZ TRAY
+// ============================================
+router.post('/sign', verifyServer, async (req, res) => {
   try {
-    const { ipAddress, type } = req.body;
-    const cafeId=req.cafe.id
-    // Optional: validate cafe exists
- if (!isValidIP(ipAddress)) {
-      return res.status(400).json({ error: 'Invalid IP address format' });
+    const { request } = req.body;
+    
+    if (!request) {
+      return res.status(400).json({ error: 'No request data provided' });
     }
-    const newPrinter = await Printer.create({ ipAddress, type, cafeId });
-    res.status(201).json(newPrinter);
+
+
+    // Convert to string exactly as QZ sends it
+    const toSign = typeof request === 'string' ? request : JSON.stringify(request);
+
+    // Create SHA512 signature (QZ Tray requirement)
+    const sign = crypto.createSign('SHA512');
+    sign.update(toSign);
+    sign.end();
+    
+    const signature = sign.sign(PRIVATE_KEY, 'base64');
+
+
+    // Return signature
+    res.json({ signature });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to create printer' });
+    console.error('❌ SIGNATURE ERROR:', error);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to sign request',
+      message: error.message 
+    });
   }
 });
 
-// Update printer
-PrinterRouter.put('/updatePrinter/:id', async (req, res) => {
+
+// ============================================
+// GET PRINTER CONFIGURATION FOR CAFE
+// ============================================
+router.get('/config', verifyServer, async (req, res) => {
   try {
-    const { ipAddress, type } = req.body
-    const cafeId=req.cafe.id
-    const printer = await Printer.findOne({where:{id:req.params.id,cafeId}});
-    if (!printer) return res.status(404).json({ error: 'Printer not found' });
-    await printer.update({ ipAddress, type, cafeId });
-    res.json(printer);
+    const cafeId = req.server.cafeId;
+
+    const printers = await PrinterConfiguration.findAll({
+      where: { 
+        cafeId,
+        
+      }
+    });
+    console.log(printers,'aze')
+    // Transform to frontend format
+    const config = {};
+    printers.forEach(printer => {
+      config[printer.type] = printer.name;
+    });
+
+    res.json({ config });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to update printer' });
+    console.error('❌ Error fetching printer config:', error);
+    res.status(500).json({ error: 'Failed to fetch printer configuration' });
   }
 });
 
-// Delete printer
-PrinterRouter.delete('/deletePrinter/:id', async (req, res) => {
+// ============================================
+// UPDATE PRINTER CONFIGURATION
+// ============================================
+router.put('/config', verifyServer, async (req, res) => {
   try {
-    const cafeId=req.cafe.id
-    const printer = await Printer.findOne({where:{id:req.params.id,cafeId}});
-    if (!printer) return res.status(404).json({ error: 'Printer not found' });
-    await printer.destroy();
-    res.json({ message: 'Printer deleted successfully' });
+    const cafeId = req.server.cafeId;
+    const { printers } = req.body; // { kitchen: "...", bar: "...", chicha: "..." }
+    // Update or create each printer config
+    console.log(printers,"azae")
+    for (const [type, name] of Object.entries(printers)) {
+      await PrinterConfiguration.upsert({
+        cafeId: cafeId,
+        type: type,
+        name: name,
+      });
+    }
+
+    res.json({ 
+      success: true,
+      message: 'Printer configuration updated' 
+    });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to delete printer' });
+    console.error('❌ Error updating printer config:', error);
+    res.status(500).json({ error: 'Failed to update printer configuration' });
   }
 });
 
-module.exports = PrinterRouter;
+// ============================================
+// GET AVAILABLE PRINTERS (from QZ via frontend)
+// ============================================
+router.post('/available', verifyServer, async (req, res) => {
+  try {
+    const cafeId = req.server.cafeId;
+    const { printers } = req.body; // Array of printer names from QZ Tray
+    console.log(printers)
+    // const data=await PrinterConfiguration.create({
+
+    // })
+    // Store detected printers for this café (optional - for admin panel)
+    // You can save this to a separate table if needed
+
+    res.json({ 
+      success: true,
+      message: `Registered ${printers.length} printers for café ${cafeId}` 
+    });
+
+  } catch (error) {
+    console.error('❌ Error registering printers:', error);
+    res.status(500).json({ error: 'Failed to register printers' });
+  }
+});
+
+module.exports = router;

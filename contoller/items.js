@@ -2,126 +2,83 @@ const Cafe = require("../models/cafe")
 const Item = require("../models/item")
 const OrderItems = require("../models/orderItems")
 const Orders = require("../models/orders")
+const Items = require("../services/items")
+const { AppError } = require("../utils/errors")
 
 module.exports={
-    getAllItems:async(req,res)=>{
+    getAllItems:async(req,res,next)=>{
     const cafeId=req.cafe.id  
       try {
-          
-            const data=await Item.findAll({where:{cafeId}})
-            if (!data) return res.status(404).json('something wrong')
-            res.status(200).json(data)
+        const ItemService=new Items({itemModel:Item,cafeId})
+        const data=await ItemService.getAllItems()
+        return res.status(200).json({
+          status:'success',
+          message:'items retrived',
+          data
+        })
             
         } catch (e) {
-            res.status(500).json({'server error':e})
+            next(e)
         }
     },
-    addItem:async(req,res)=>{
+    addItem:async(req,res,next)=>{
       const cafeId=req.cafe.id  
       try {
-
-            const data=await Item.create({...req.body,cafeId})
-            if (data) return res.status(200).json({'created':data})
-            else return res.status(404).json('something wen wrong')
-            
+      const ItemService=new Items({itemModel:Item,cafeId})
+      const data=await ItemService.add(req.body) 
+      return res.status(200).json({
+        status:'success',
+        message:'data retrived successfully',
+        data
+      })
         } catch (e) {
-            res.status(500).json({'internal server error':e})
+          next(e)
         }
     },
-    updateItem:async(req,res)=>{
+    updateItem:async(req,res,next)=>{
       const {id}=req.params
       const cafeId=req.cafe.id
-
-        try {
-          const it=await Item.findOne({where:{id,cafeId}})
-          if (!it||!cafeId||!id) return res.status(400).json('no item found')
-            const data=await Item.update(req.body,{where:{id,cafeId}})
-            if (data) return res.status(200).json({'updated':data})
-            else return res.status(404).json('something wen wrong')
-            
-        } catch (e) {
-            res.status(500).json({'internal server error':e})
+      try {
+      const itemService=new Items({itemModel:Item,cafeId})
+      const data=await itemService.upItem(req.body,id)
+      if (data) return res.status(200).json({
+        status:'success',
+        message:'item updated successfully'
+      })
+      } catch (e) {
+            next(e)
         }
     },
-  deleteItem: async (req, res) => {
+  deleteItem: async (req, res,next) => {
   const { id } = req.params;
-  const cafeId = req.cafe.id; // 🔐 الكافيه الحالي من الـmiddleware
+  const cafeId = req.cafe.id; 
 
   try {
-    // 🔍 نلقاو الـItem ونتأكد أنه تابع للكافيه هذا
-    const item = await Item.findOne({ where: { id, cafeId } });
-    if (!item||!cafeId||!id)
-      return res.status(404).json({ message: "❌ Item not found or unauthorized" });
-
-    // 🧾 نلقاو كل الـOrderItems اللي تستعمل هذا المنتج
-    const orderItems = await OrderItems.findAll({
-      where: { itemId: id },
-      include: [{ model: Orders, where: { cafeId } }],
-    });
-
-    for (const it of orderItems) {
-      // نحافظ على التاريخ لكن نحدّث الكمية
-      it.quantity = 0;
-      await it.save();
-
-      // 🧮 نعيد حساب total لكل order متأثر
-      const order = await Orders.findOne({
-        where: { id: it.orderId, cafeId },
-      });
-
-      if (order) {
-        const relatedItems = await OrderItems.findAll({
-          where: { orderId: order.id },
-        });
-
-        const newPrice = relatedItems.reduce(
-          (sum, r) => sum + r.quantity * r.price,
-          0
-        );
-
-        order.totalPrice = newPrice;
-        await order.save();
-
-        // ⚠️ نحذف order فارغ (total 0)
-        if (newPrice === 0) {
-          await Orders.destroy({ where: { id: order.id, cafeId } });
-        }
-      }
-    }
-
-    // 🧹 في الأخير نحذف الـItem نهائياً
-    await OrderItems.destroy({ where: { itemId: id } }); // نحذف التفاصيل المتبقية
-    await Item.destroy({ where: { id, cafeId } });
-
-    res.status(200).json({ message: `✅ Item ${id} deleted successfully` });
+  const itemService=new Items({itemModel:Item})
+  const deleted=await itemService.del(id,cafeId)
+  if (deleted) return res.status(200).json({
+    status:'success',
+    message:'item deleted'
+  })    
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "Internal server error", error: e.message });
+    next(e)
   }
 },
-getItemsForUser:async(req,res)=>{
-  const cafeId=req.user.cafeId
-  try {
-const data = await Item.findAll({
-  where: { cafeId },
-  include: [
-    {
-      model: Cafe,        // your Cafe model
-      attributes: ['name'] // optional: select specific columns
-    }
-  ]
-});
-    if (!data) return res.status(404).json('something went wrong')
-    res.status(200).json(data)
-
-
+getItemsForUser:async(req,res,next)=>{
+const cafeId=req.user.cafeId
+try {
+const itemService=new Items({itemModel:Item,cafeModel:Cafe})
+const data=await itemService.getItemsForUser(cafeId)
+if (data) return res.status(200).json({
+  status:'success',
+  message:'items retrieved successfully',
+  data
+})
   } catch (e) {
-    res.status(500).json({ message: "Internal server error", error: e.message });
-    
+    next(e)    
   }
 },
 getItemsForPro:async(req,res)=>{
-  try {
    const categoryImages = {
   coffee: [
     '/images/cafecreme.jpg',
@@ -263,11 +220,9 @@ getItemsForPro:async(req,res)=>{
     '/images/black.jpg',
     
   ],
+
 }
-  return res.status(200).json(categoryImages)
-  } catch (e) {
-    res.status(500).json('serv err')
-  }
+return res.status(200).json(categoryImages)
 }
 
 

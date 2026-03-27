@@ -1,30 +1,19 @@
-// ============================================
-const jwt = require("jsonwebtoken");
+const { AppError } = require("../utils/errors");
+const jwt=require('jsonwebtoken')
+module.exports = async function verifyCafeBasic(req, res, next) {
+  try {
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
 
-module.exports = function verifyCafeBasic(req, res, next) {
-  // ✅ FIX: use lowercase "authorization"
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-    if (!token) {
-    return res
-      .status(401)
-      .json({ redirectTo: "/login" });
-  }
+    if (!token) throw new AppError("Unauthorized", 401);
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      console.warn("❌ Invalid or expired access token:", err.message);
-      return res
-        .status(401)
-        .json({ redirectTo: "/login" });
-    }
-    if (!decoded){
-         return res
-        .status(401)
-        .json({ redirectTo: "/login" });
-    }
-
-    req.cafe = decoded; // attach cafe info
+    const decoded = jwt.verify(token, process.env.JWT_SECRET); 
+    if (decoded.role!=='cafe') throw new AppError('unauthorized')
+    if (decoded.subscriptionEnd<=new Date()) throw new AppError('subscription ended',403)
+    req.cafe = decoded;
     next();
-  });
+
+  } catch (err) {
+    next(err); 
+  }
 };

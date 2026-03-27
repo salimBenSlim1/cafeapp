@@ -21,11 +21,11 @@ const MessagesForm = sequelize.define("messages_form", {
     allowNull: false,
   },
   phone: {
-    type: DataTypes.TEXT, // ex: "boisson chaude", "dessert", "jus"
+    type: DataTypes.TEXT, 
     allowNull: true,
   },
   plan: {
-    type: DataTypes.TEXT, // lien vers l’image (cappuccino, jus d’orange…)
+    type: DataTypes.TEXT, 
     allowNull: true,
   }
 },{tableName:'messages_form'});

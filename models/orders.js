@@ -1,4 +1,3 @@
-// Table Command
 const {DataTypes}=require('sequelize')
 const sequelize=require('../db/db-config');
 const Cafe = require('./cafe');
@@ -9,8 +8,12 @@ const Orders = sequelize.define('Orders', {
     autoIncrement:true
   },
   totalPrice: {
-    type: DataTypes.FLOAT, // garde les articles sous forme d’array
+    type: DataTypes.FLOAT, 
     allowNull: true
+  },
+  tableNumber: {
+    type: DataTypes.INTEGER, 
+    allowNull: false
   },
   status: {
     type: DataTypes.ENUM('pending', 'canceled', 'served'),
@@ -26,6 +29,11 @@ const Orders = sequelize.define('Orders', {
 }
 
 }, {
-  timestamps: true
+  timestamps: true,
+  indexes:[{
+    fields:['createdAt'],
+    name:'idx_orders_createdAt'
+  }
+  ]
 });
 module.exports=Orders

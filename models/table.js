@@ -24,9 +24,17 @@ const Table = sequelize.define('Table', {
     type: DataTypes.STRING, // lien vers QR
     allowNull: true
   },
-  sessionToken: {
-    type: DataTypes.STRING, // lien vers QR
-    allowNull: true
+  sessionActive:{
+    type:DataTypes.BOOLEAN,
+    allowNull:true
+  },
+  sessionStart:{
+    type:DataTypes.DATE,
+    allowNull:true
+  },
+  lastOrderAt:{
+    type:DataTypes.DATE,
+    allowNull:true
   },
   assignedTo: {
     type: DataTypes.INTEGER, // lien vers QR
@@ -41,5 +49,10 @@ const Table = sequelize.define('Table', {
   onDelete: "CASCADE",
 }
 
-}, { timestamps: false });
+}, { timestamps: false,
+  indexes:[{
+    fields:['assignedTo'],
+    name:'idx_tables_assignedTo'
+  }]
+ });
 module.exports = Table 

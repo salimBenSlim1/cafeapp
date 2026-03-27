@@ -1,34 +1,42 @@
 const MessagesForm = require("../models/messagesForm")
+const MessageFormService = require("../services/messageForm")
+const { AppError } = require("../utils/errors")
 
 module.exports={
-    addForm:async(req,res)=>{
+    addForm:async(req,res,next)=>{
         try {
-        const data=await MessagesForm.create(req.body)
-        if (!data) return res.status(404).json('something went wrong')
-        res.status(200).json('created')
-            
+        const messageFormService=new MessageFormService({messageModel:MessagesForm})
+        const created=await messageFormService.add(req.body)
+        return res.status(200).json({status:'success',message:'form created successfully'})
         } catch (e) {
-            res.status(500).json({'server err':e})
+           next(e)
         }
     },
-    getForms:async(req,res)=>{
+    getForms:async(req,res,next)=>{
         try {
-        const data=await MessagesForm.findAll()
-        if (!data) return res.status(404).json('something went wrong')
-        res.status(200).json(data)
+        const messageFormService=new MessageFormService({messageModel:MessagesForm})
+        const data=await messageFormService.getforms()
+        if (data) res.status(200).json({
+            status:'success',
+            message:'forms retrived successfully',
+            data
+        })
         } catch (e) {
-            res.status(500).json('server err')
+            next(e)
         }
     },
-    deleteForm:async(req,res)=>{
+    deleteForm:async(req,res,next)=>{
         const {id}=req.params
         try {
-            const data=await MessagesForm.destroy({where:{id}})
-            if (!data) return res.status(400).json('something wrong')
-            res.status(200).json('deleted')
+           const messageFormService=new MessageFormService({messageModel:MessagesForm})
+            const data=await messageFormService.delForm(id)
+            if (data) return res.status(200).json({
+                status:'success',
+                message:'form deleted'
+            })
             
         } catch (e) {
-            res.status(500).json('server err')
+            next(e)
             
         }
     }

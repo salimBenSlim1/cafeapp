@@ -7,21 +7,52 @@ const jwt=require('jsonwebtoken')
 const { google } = require('googleapis');
 
 require('dotenv').config();
-// const OAuth2 = google.auth.OAuth2;
+const OAuth2 = google.auth.OAuth2;
+const oauth2Client = new OAuth2(
+  process.env.CLIENT_ID,
+  process.env.CLIENT_SECRET,
+  'https://developers.google.com/oauthplayground'
+);
 
-// const oauth2Client = new OAuth2(
-//   process.env.CLIENT_ID,
-//   process.env.CLIENT_SECRET,
-//   'https://developers.google.com/oauthplayground' // redirect URI
-// );
-// oauth2Client.setCredentials({
-//   refresh_token: process.env.REFRESH_TOKEN,
-// });
+oauth2Client.setCredentials({
+  refresh_token: process.env.REFRESH_TOKEN,
+});
+async function sendTestEmail(toEmail = process.env.EMAIL_USER) {
+  try {
+    // Get a fresh access token
+    const accessToken = (await oauth2Client.getAccessToken()).token;
 
-// Génère une API Key unique
-function generateApiKey() {
-  return crypto.randomBytes(16).toString('hex'); // 32 caractères hex
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: process.env.EMAIL_USER,
+        clientId: process.env.CLIENT_ID,
+        clientSecret: process.env.CLIENT_SECRET,
+        refreshToken: process.env.REFRESH_TOKEN,
+        accessToken: accessToken,
+      },
+    });
+await transporter.verify();
+      console.log("✅ SMTP connection successful");
+    const mailOptions = {
+      from: `CoffeeCloud <${process.env.EMAIL_USER}>`,
+      to: toEmail,
+      subject: '☕ Test Email from CoffeeCloud',
+      text: 'This is a test email sent via Gmail OAuth2!',
+      html: '<p>This is a <strong>test email</strong> sent via Gmail OAuth2!</p>',
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Email sent:', result.response);
+    return result;
+  } catch (err) {
+    console.error('Error sending email:', err);
+    throw err;
+  }
 }
+// Génère une API Key unique
+
 const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
@@ -65,7 +96,7 @@ async function generateQRForTables(cafeId, domain) {
 
   for (const table of tables) {
     // const url = `https://${domain}cafeapp.tn?t=${table.qrKey}`;
-    const url = `https://cafeapp-frontend-lij4.vercel.app/client-panier?t=${table.qrKey}`;
+    const url = `https://coffai.tn/client-panier?t=${table.qrKey}`;
     const qrImage = await QRCode.toDataURL(url, {
       width: qrSize * 2, // Haute résolution pour l'impression
       margin: 1,
@@ -213,14 +244,37 @@ async function downloadQRCodes (req, res) {
 
 
 
+async function sendEmailGmailAPI(to, subject, body) {
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
+  const emailLines = [
+    `From: "CoffeeCloud" <${process.env.EMAIL_USER}>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'Content-Type: text/html; charset=UTF-8',
+    '',
+    body
+  ];
+  const email = emailLines.join('\n');
+
+  const encodedMessage = Buffer.from(email)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const res = await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: { raw: encodedMessage },
+  });
+
+}
 // Génère un mot de passe aléatoire sécurisé
 async function provisionTenant(req, res) {
   try {
     const now = new Date();
-    const apiKeyExpiresAt = new Date(now);
-    apiKeyExpiresAt.setDate(apiKeyExpiresAt.getDate() + 7);
-
+    const monthLater=new Date()
+    monthLater.setMonth(monthLater.getMonth()+1)
     const password = generatePassword();
 
     // 🧩 Check required fields
@@ -235,10 +289,9 @@ async function provisionTenant(req, res) {
     }
 
     // ⚙️ Determine number of tables based on plan
-    let numberOfTables = 20; // default basic
+    let numberOfTables = 20;
     if (req.body.plan === 'pro') numberOfTables = 50;
     if (req.body.plan === 'custom' && req.body.customTables) {
-      console.log(req.body.customTables,'aaa')
       numberOfTables = parseInt(req.body.customTables);
       if (isNaN(numberOfTables) || numberOfTables < 1) {
         return res.status(400).json('invalid custom table number');
@@ -250,12 +303,10 @@ async function provisionTenant(req, res) {
       name: req.body.cafeName,
       email: req.body.email,
       plan: req.body.plan,
-      apiKey: generateApiKey(),
       password,
-      apiKeyExpiresAt,
       verifiedPayment: '0',
       subscriptionStartDate: now,
-      subscriptionEndDate: apiKeyExpiresAt,
+      subscriptionEndDate: monthLater,
       lastLoginDate: now
     });
 
@@ -280,89 +331,83 @@ async function provisionTenant(req, res) {
     // 📸 Generate QR codes
     const data = await generateQRForTables(tenant.id, req.body.domaine);
 
-    // (Optional) Send welcome email later
-    //  const accessToken = await oauth2Client.getAccessToken();
-
-  //   const transporter = nodemailer.createTransport({
-  //     service: 'gmail',
-  //     auth: {
-  //       type: 'OAuth2',
-  //       user: process.env.EMAIL_USER,
-  //       clientId: process.env.CLIENT_ID,
-  //       clientSecret: process.env.CLIENT_SECRET,
-  //       refreshToken: process.env.REFRESH_TOKEN,
-  //       accessToken: accessToken.token,
-  //     },
-  //   });
-//  const oAuth2Client = new google.auth.OAuth2(
-//    process.env.CLIENT_ID,
-//   process.env.CLIENT_SECRET,
-//   'https://developers.google.com/oauthplayground' // redirect URI
-// );
-
-// oAuth2Client.setCredentials({ refresh_token: process.env.REFRESH_TOKEN });
-
-// const accessToken = await oAuth2Client.getAccessToken();
-
-// const transporter = nodemailer.createTransport({
-//   host: "smtp.gmail.com",
-//   port: 465 , // or 465 for SSL
-//   secure: true, // true for 465, false for 587
-//   auth: {
-//     type: "OAuth2",
-//     user: process.env.EMAIL_USER,
-//     clientId: process.env.CLIENT_ID,
-//     clientSecret: process.env.CLIENT_SECRET,
-//     refreshToken: process.env.REFRESH_TOKEN,
-//     accessToken: accessToken.token,
-//   },
-//   tls: {
-//     rejectUnauthorized: false
-//   }
-// });
-// transporter.verify((error, success) => {
-//   if (error) {
-//     console.error("SMTP connection failed:", error);
-//   } else {
-//     console.log("SMTP connection successful:", success);
-//   }
-// });
-//   const htmlMessage = `
-//     <p>${req.body.cafeName},</p>
-
-//     <p>Nous sommes ravis de vous accueillir sur <strong>CoffeeCloud</strong> — votre solution complète pour gérer votre café facilement et efficacement !</p>
-
-//     <p>Voici vos identifiants de connexion :</p>
-//     <ul>
-//       <li><strong>Email :</strong>${req.body.email}</li>
-//       <li><strong>Mot de passe :</strong>${password}</li>
-//     </ul>
-
-//     <p>Vous pouvez vous connecter à tout moment via ce lien :<br>
-//     <a href="https://app.coffeecloud.com/login">https://app.coffeecloud.com/login</a></p>
-
-//     <p>🔒 Pour des raisons de sécurité, nous vous recommandons de sauvegarder votre mot de passe .</p>
-
-//     <p>Nous vous souhaitons beaucoup de succès avec votre café et sommes ravis de vous accompagner dans cette aventure !</p>
-
-//     <p>— L’équipe <strong>CoffeeCloud</strong></p>
-//   `;
-//     const mailOptions = {
-//       from: `"Coffai Support" <${process.env.EMAIL_USER}>`,
-//       to: req.body.email,
-//       subject: 'Welcome to Coffai ☕',
-//       html: htmlMessage,
-//     };
-
-   
- 
+    // 📧 Send welcome email
+    // try {
+    //   // ✅ Get fresh access token
    
 
-//     await transporter.sendMail(mailOptions);
-    return res.status(200).json({ tenant, password, tables: numberOfTables, qr: data });
+    
+
+    //   const htmlMessage = `
+    //     <!DOCTYPE html>
+    //     <html>
+    //     <head>
+    //       <meta charset="UTF-8">
+    //     </head>
+    //     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    //       <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    //         <h2 style="color: #6F4E37;">Bienvenue sur Coffai ☕</h2>
+            
+    //         <p>Bonjour <strong>${req.body.cafeName}</strong>,</p>
+
+    //         <p>Nous sommes ravis de vous accueillir sur <strong>Coffai</strong> — votre solution complète pour gérer votre café facilement et efficacement !</p>
+
+    //         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+    //           <h3 style="margin-top: 0;">Vos identifiants de connexion :</h3>
+    //           <ul style="list-style: none; padding: 0;">
+    //             <li><strong>Email :</strong> ${req.body.email}</li>
+    //             <li><strong>Mot de passe :</strong> <code style="background-color: #fff; padding: 5px 10px; border-radius: 3px;">${password}</code></li>
+    //           </ul>
+    //         </div>
+
+    //         <p>Vous pouvez vous connecter à tout moment via ce lien :<br>
+    //         <a href="https://coffai.tn/login" style="color: #6F4E37; text-decoration: none; font-weight: bold;">https://coffai.tn/login</a></p>
+
+    //         <p style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+    //           🔒 <strong>Important :</strong> Pour des raisons de sécurité, nous vous recommandons de sauvegarder votre mot de passe dans un endroit sûr.
+    //         </p>
+
+    //         <p>Nous vous souhaitons beaucoup de succès avec votre café et sommes ravis de vous accompagner dans cette aventure !</p>
+
+    //         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+            
+    //         <p style="color: #888; font-size: 14px;">
+    //           Cordialement,<br>
+    //           <strong>L'équipe Coffai</strong>
+    //         </p>
+    //       </div>
+    //     </body>
+    //     </html>
+    //   `;
+
+    //   // const mailOptions = {
+    //   //   from: `"Coffai Support" <${process.env.EMAIL_USER}>`,
+    //   //   to: req.body.email,
+    //   //   subject: '☕ Bienvenue sur Coffai !',
+    //   //   html: htmlMessage,
+    //   // };
+    //   // sendEmailGmailAPI(req.body.email,'☕ Bienvenue sur Coffai !',htmlMessage)
+
+    // } catch (emailError) {
+    //   console.error("❌ Email sending failed:", emailError);
+    //   console.error("Error details:", {
+    //     message: emailError.message,
+    //     code: emailError.code,
+    //     command: emailError.command
+    //   });
+    //   // Continue anyway - don't fail the entire provisioning
+    // }
+
+    return res.status(200).json({ 
+      tenant, 
+      password, 
+      tables: numberOfTables, 
+      qr: data 
+    });
+
   } catch (err) {
     console.error('Error provisioning tenant:', err);
-    return res.status(500).json('internal error');
+    return res.status(500).json({ 'internal error': err.message });
   }
 }
 
@@ -380,6 +425,6 @@ async function authAdmin(req,res){
     res.status(500).json('server err')
   }
 }
-// Controller pour télécharger le PDF
+
 
 module.exports={provisionTenant,generateQRForTables,downloadQRCodes,authAdmin}

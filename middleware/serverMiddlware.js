@@ -1,34 +1,36 @@
-// middlewares/verifyAdmin.js
 const jwt = require('jsonwebtoken');
 
 module.exports = async function verifyServer(req, res, next) {
+const token = req.headers["server-token"];
+const payload = jwt.decode(token); // decode without verification
   try {
-    const token = req.headers["server-token"];
 
-    // If token is missing
     if (!token) {
       return res.status(401).json({
-        redirectTo: "https://cafeapp-frontend-lij4.vercel.app/login"
+        redirectTo:  "/login"
       });
     }
-
-    // Verify token
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    // Check if the user is admin (for example, email or role)
     if (!decoded || decoded.role !== "server") {
       return res.status(403).json({
-        redirectTo: "https://cafeapp-frontend-lij4.vercel.app/login"
+        redirectTo:  "/server-login?id="+payload.cafeId
       });
     }
 
-    // Attach user info to request if needed
     req.server = decoded;
 
-    // Continue to next middleware
     next();
   } catch (err) {
-    return res.status(401).json({
-      redirectTo: "https://cafeapp-frontend-lij4.vercel.app/login"
+    if (err.name === "TokenExpiredError") {
+
+      return res.status(403).json({
+        redirectTo: "/server-login?id="+payload.cafeId
+      });
+    }
+
+    return res.status(403).json({
+      redirectTo:"/server-login?id="+payload.cafeId
     });
   }
 };

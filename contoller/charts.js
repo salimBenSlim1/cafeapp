@@ -1,100 +1,293 @@
-const Order = require("../models/orders");
-const Item = require("../models/item");
-const OrderItems = require("../models/orderItems");
+const DailyItemStat = require("../models/items_stats");
+const DailyCafeStat = require("../models/order_stats");
 const { fn, col, literal, Op } = require("sequelize");
 
-module.exports = {
-  // Ventes par produit
-  getSalesByItem: async (req, res) => {
-    try {
-      const cafeId = req.cafe.id;
-      if (!req.cafe.id) return res.status(400).json('no cafe found')
-      // 🗓️ Define the 7 last days (include today)
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); // End of today
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(today.getDate() - 7);
-      sevenDaysAgo.setHours(0, 0, 0, 0); // Start of 7 days ago
+/* ─────────────────────────────────────────
+   Helper — build date range from preset
+   Presets: today | yesterday | 7d | 30d | 90d | mtd | ytd | custom
+───────────────────────────────────────── */
+function buildRange(preset, from, to) {
+  const now   = new Date();
+  const start = new Date(now); start.setHours(0, 0, 0, 0);
+  const end   = new Date(now); end.setHours(23, 59, 59, 999);
 
-      const data = await OrderItems.findAll({
-        attributes: [
-          ["itemId", "itemId"],
-          [fn("SUM", col("OrderItems.quantity")), "totalSold"],
-          [literal('SUM("OrderItems"."quantity" * "OrderItems"."price")'), "totalRevenue"],
-        ],
-        include: [
-          {
-            model: Item,
-            attributes: ["name"],
-            required: true
-          },
-          {
-            model: Order,
-            attributes: [],
-            required: true,
-            where: {
-              cafeId,
-              status: "served",
-              createdAt: {
-                [Op.between]: [sevenDaysAgo, today],
-              },
-            },
-          },
-        ],
-        group: ["OrderItems.itemId", "Item.id", "Item.name"],
-        order: [[literal('SUM("OrderItems"."quantity" * "OrderItems"."price")'), "DESC"]], // Changed: repeat the calculation
-      });
+  switch (preset) {
+    case "today":
+      return { start, end };
 
-      res.json(data);
-    } catch (e) {
-      console.error(e);
-      res.status(500).json({ message: "Server error", error: e.message });
+    case "yesterday": {
+      const s = new Date(start); s.setDate(s.getDate() - 1);
+      const e = new Date(s);     e.setHours(23, 59, 59, 999);
+      return { start: s, end: e };
     }
-  },
 
-  // Revenus journaliers sur les 7 derniers jours
-  getDailyRevenue: async (req, res) => {
+    case "7d": {
+      const s = new Date(start); s.setDate(s.getDate() - 6);
+      return { start: s, end };
+    }
+
+    case "30d": {
+      const s = new Date(start); s.setDate(s.getDate() - 29);
+      return { start: s, end };
+    }
+
+    case "90d": {
+      const s = new Date(start); s.setDate(s.getDate() - 89);
+      return { start: s, end };
+    }
+
+    case "mtd": {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { start: s, end };
+    }
+
+    case "ytd": {
+      const s = new Date(now.getFullYear(), 0, 1);
+      return { start: s, end };
+    }
+
+    case "custom": {
+      if (!from || !to) throw new Error("custom preset requires from and to");
+      const s = new Date(from); s.setHours(0, 0, 0, 0);
+      const e = new Date(to);   e.setHours(23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+
+    default:
+      throw new Error(`Unknown preset: ${preset}`);
+  }
+}
+
+/* ─────────────────────────────────────────
+   Helper — choose grouping based on range size
+   ≤2 days  → hour (falls back to day since snapshots are daily)
+   ≤9 days  → day
+   ≤31 days → week  (7-day buckets, exactly 1 or 4 weeks)
+   >31 days → month
+───────────────────────────────────────── */
+function chooseGrouping(start, end) {
+  const days = Math.round((end - start) / 86400000);
+  if (days <= 9)  return "day";
+  if (days <= 31) return "week";
+  return "month";
+}
+
+/* ─────────────────────────────────────────
+   Build evenly-spaced week buckets so that:
+   - 7d  → 1 bucket  (the whole week)
+   - 30d → 4 buckets (4 × ~7-day windows)
+   Each bucket: { label, start, end }
+───────────────────────────────────────── */
+function buildWeekBuckets(start, end) {
+  const totalDays = Math.round((end - start) / 86400000) + 1;
+  // snap to 4 buckets for 30-day windows, 1 for 7-day
+  const numBuckets = totalDays <= 9 ? 1 : 4;
+  const bucketSize = Math.ceil(totalDays / numBuckets);
+  const buckets = [];
+
+  for (let i = 0; i < numBuckets; i++) {
+    const bStart = new Date(start);
+    bStart.setDate(bStart.getDate() + i * bucketSize);
+    bStart.setHours(0, 0, 0, 0);
+
+    const bEnd = new Date(bStart);
+    bEnd.setDate(bEnd.getDate() + bucketSize - 1);
+    bEnd.setHours(23, 59, 59, 999);
+    // never exceed the overall end date
+    if (bEnd > end) bEnd.setTime(end.getTime());
+
+    const label = `Week ${i + 1}`;
+    buckets.push({ label, start: bStart, end: bEnd });
+  }
+  return buckets;
+}
+
+/* ─────────────────────────────────────────
+   Format a Date as YYYY-MM-DD for createdAt date comparison
+───────────────────────────────────────── */
+function dateOnly(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+/* ─────────────────────────────────────────
+   GET /stats?preset=7d | 30d | today | custom&from=&to=
+
+   Returns:
+   { meta, summary, revenue[], sales[] }
+───────────────────────────────────────── */
+module.exports = {
+  getStats: async (req, res) => {
     try {
       const cafeId = req.cafe.id;
-      if (!req.cafe.id) return res.status(400).json('no cafe found')
+      if (!cafeId) return res.status(400).json({ error: "no cafe found" });
 
-      // Get today and 7 days ago with proper time boundaries
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); // End of today
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(today.getDate() - 7);
-      sevenDaysAgo.setHours(0, 0, 0, 0); // Start of 7 days ago
+      const preset  = req.query.preset || "30d";
+      const { start, end } = buildRange(preset, req.query.from, req.query.to);
+      const grouping = chooseGrouping(start, end);
 
-      const data = await Order.findAll({
-        where: {
-          cafeId,
-          status: "served",
-          createdAt: {
-            [Op.between]: [sevenDaysAgo, today],
+      // ── Shared where clause for both tables ──────────────────────────
+      const dateWhere = {
+        cafeId,
+        createdAt: { [Op.between]: [start, end] },
+      };
+
+      // ── Previous period (same length) ────────────────────────────────
+      const len    = end - start;
+      const pEnd   = new Date(start.getTime() - 1);
+      const pStart = new Date(pEnd.getTime() - len);
+
+      // ── Run queries in parallel ──────────────────────────────────────
+      const [cafeRows, itemRows, prevCafeRows] = await Promise.all([
+
+        // 1. Aggregated cafe stats for the period
+        DailyCafeStat.findAll({
+          where: dateWhere,
+          attributes: [
+            [fn("SUM", col("totalRevenue")), "totalRevenue"],
+            [fn("SUM", col("totalOrders")),  "totalOrders"],
+          ],
+          raw: true,
+        }),
+
+        // 2. Item breakdown for the period
+        DailyItemStat.findAll({
+          where: dateWhere,
+          attributes: [
+            "itemName",
+            "itemCategory",
+            [fn("SUM", col("totalSold")),    "totalSold"],
+            [fn("SUM", col("totalRevenue")), "totalRevenue"],
+          ],
+          group: ["itemName", "itemCategory"],
+          order: [[literal("totalSold"), "DESC"]],
+          raw: true,
+        }),
+
+        // 3. Previous period cafe stats (for % change KPIs)
+        DailyCafeStat.findAll({
+          where: {
+            cafeId,
+            createdAt: { [Op.between]: [pStart, pEnd] },
           },
+          attributes: [
+            [fn("SUM", col("totalRevenue")), "totalRevenue"],
+            [fn("SUM", col("totalOrders")),  "totalOrders"],
+          ],
+          raw: true,
+        }),
+      ]);
+
+      // ── Shape sales data ─────────────────────────────────────────────
+      const sales = itemRows.map(row => ({
+        name:         row.itemName,
+        category:     row.itemCategory || "",
+        totalSold:    parseInt(row.totalSold)    || 0,
+        totalRevenue: parseFloat(row.totalRevenue) || 0,
+      }));
+
+      // ── Current period summary ────────────────────────────────────────
+      const totalRevenue = parseFloat(cafeRows[0]?.totalRevenue) || 0;
+      const totalOrders  = parseInt(cafeRows[0]?.totalOrders)    || 0;
+      const totalSold    = sales.reduce((s, i) => s + i.totalSold, 0);
+
+      // ── Previous period ────────────────────────────────────────────────
+      const prevRevenue = parseFloat(prevCafeRows[0]?.totalRevenue) || 0;
+      const prevOrders  = parseInt(prevCafeRows[0]?.totalOrders)    || 0;
+
+      const pctRev    = prevRevenue > 0
+        ? ((totalRevenue - prevRevenue) / prevRevenue * 100).toFixed(1)
+        : null;
+      const pctOrders = prevOrders > 0
+        ? ((totalOrders - prevOrders) / prevOrders * 100).toFixed(1)
+        : null;
+
+      // ── Build revenue timeline based on grouping ─────────────────────
+      let revenue = [];
+
+      if (grouping === "day") {
+        // One row per day — fetch raw daily rows ordered by date
+        const dailyRows = await DailyCafeStat.findAll({
+          where: dateWhere,
+          attributes: [
+            [fn("DATE", col("createdAt")), "period"],
+            [fn("SUM", col("totalRevenue")), "revenue"],
+            [fn("SUM", col("totalOrders")),  "orders"],
+          ],
+          group: [fn("DATE", col("createdAt"))],
+          order: [[fn("DATE", col("createdAt")), "ASC"]],
+          raw: true,
+        });
+        revenue = dailyRows.map(r => ({
+          period:  r.period,
+          revenue: parseFloat(r.revenue) || 0,
+          orders:  parseInt(r.orders)    || 0,
+        }));
+
+      } else if (grouping === "week") {
+        // Build exactly 1 or 4 even week buckets and aggregate each
+        const buckets = buildWeekBuckets(start, end);
+
+        // Fetch all daily rows for the period once
+        const allDaily = await DailyCafeStat.findAll({
+          where: dateWhere,
+          attributes: ["createdAt", "totalRevenue", "totalOrders"],
+          raw: true,
+        });
+
+        revenue = buckets.map(bucket => {
+          const rows = allDaily.filter(r => {
+            const d = new Date(r.createdAt);
+            return d >= bucket.start && d <= bucket.end;
+          });
+          return {
+            period:  bucket.label,
+            revenue: rows.reduce((s, r) => s + (parseFloat(r.totalRevenue) || 0), 0),
+            orders:  rows.reduce((s, r) => s + (parseInt(r.totalOrders)    || 0), 0),
+          };
+        });
+
+      } else {
+        // month grouping (>31 days)
+        const monthlyRows = await DailyCafeStat.findAll({
+          where: dateWhere,
+          attributes: [
+            [fn("DATE_FORMAT", col("createdAt"), "%Y-%m"), "period"],
+            [fn("SUM", col("totalRevenue")), "revenue"],
+            [fn("SUM", col("totalOrders")),  "orders"],
+          ],
+          group: [fn("DATE_FORMAT", col("createdAt"), "%Y-%m")],
+          order: [[fn("DATE_FORMAT", col("createdAt"), "%Y-%m"), "ASC"]],
+          raw: true,
+        });
+        revenue = monthlyRows.map(r => ({
+          period:  r.period,
+          revenue: parseFloat(r.revenue) || 0,
+          orders:  parseInt(r.orders)    || 0,
+        }));
+      }
+
+      res.json({
+        meta: {
+          preset,
+          grouping,
+          from: start.toISOString(),
+          to:   end.toISOString(),
         },
-        attributes: [
-          [
-            literal('"createdAt"::date'),
-            "date",
-          ],
-          [
-            fn("SUM", col("totalPrice")),
-            "revenue",
-          ],
-        ],
-        group: [literal('"createdAt"::date')],
-        order: [[literal('"createdAt"::date'), "ASC"]],
-        raw: true
+        summary: {
+          totalRevenue,
+          totalSold,
+          totalOrders,
+          avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+          pctRev,
+          pctOrders,
+        },
+        revenue,  // [{ period, revenue, orders }]
+        sales,    // [{ name, category, totalSold, totalRevenue }]
       });
 
-      res.json(data);
     } catch (e) {
       console.error(e);
-      res.status(500).json({
-        message: "Internal server error",
-        error: e.message,
-      });
+      res.status(500).json({ error: e.message });
     }
   },
 };

@@ -1,128 +1,99 @@
 const Server = require("../models/servers")
 const Table = require("../models/table")
-const jwt=require('jsonwebtoken')
+const ServerService = require("../services/server")
+const sequelize = require("../db/db-config")
+const serverService=new ServerService({serverModel:Server,tableModel:Table,sequelize})
 module.exports={
-    addServer:async(req,res)=>{
+    addServer:async(req,res,next)=>{
         const cafeId=req.cafe.id
         try {
-            const data=await Server.create({...req.body,cafeId})
-            if (!data) return res.status(400).json('something wrong')
-            res.status(200).json('server created')
-            
-        } catch (e) {
-            res.status(500).json('server error')
-        }
-    },
-    getServersOfCoffe:async(req,res)=>{
-        const cafeId=req.cafe.id
-        try {
-            const data=await Server.findAll({
-                where:{cafeId},
-            })
-            if (!data) return res.status(400).json('something wrong')
-            res.status(200).json(data)
-            
-        } catch (e) {
-            res.status(500).json('server error')
-            
-        }
-    },
-    getServerTables:async(req,res)=>{
-        const cafeId=req.cafe.id
-        const {id}=req.params
-        if (!id) return res.status(400).json('err')
-        try {
-            const data=await Table.findAll({
-                where:{cafeId,assignedTo:id},
-            })
-            if (!data) return res.status(400).json('something wrong')
-            res.status(200).json(data)
-            
-        } catch (e) {
-            res.status(500).json('server error')
-            
-        }
-    },
-    deleteServerOfCoffe:async(req,res)=>{
-        const cafeId=req.cafe.id
-        const {id}=req.params
-        try {
-            const tbs=await Table.findAll({where:{cafeId,assignedTo:id}})
-            for (const tb of tbs){
-            tb.assignedTo=null
-            tb.save()
+            const sData=await serverService.addServer(req.validatedData,cafeId) 
+            if (sData) res.status(200).json({message:'server created',status:'success',data:sData})
 
-            }
-            const data=await Server.destroy({where:{cafeId,id}})
-            if (!data) return res.status(400).json('something wrong')
-            res.status(200).json('server deleted')
-            
         } catch (e) {
-            res.status(500).json('server error')
-            
+            next(e)
         }
     },
-    updateServerOfCoffe:async(req,res)=>{
+    getServersOfCoffe:async(req,res,next)=>{
         const cafeId=req.cafe.id
-        const {id}=req.params
-        if (!req.body.begin||req.body.end) return res.status(400).json('err')
         try {
-            const data=await Server.update(
-                {begin:req.body.begin,end:req.body.end},
-                {where:{cafeId,id}})
-            if (!data) return res.status(400).json('something wrong')
-            res.status(200).json('server deleted')
+            const data=await serverService.getServerOfCoffe(cafeId)
+            if (data.length!==0) res.status(200).json({status:'success',message:'servers retrieved',data})
             
         } catch (e) {
-            res.status(500).json('server error')
+        next(e)            
+        }
+    },
+    getServerTables:async(req,res,next)=>{
+        const cafeId=req.cafe.id
+        const {id}=req.params
+        try {
+            const data=await serverService.getServerTables(cafeId,id)
+            if (data.length!==0) res.status(200).json({status:'success',message:'servers retrieved',data})
+            
+        } catch (e) {
+        next(e)            
+        }
+    },
+    deleteServerOfCoffe:async(req,res,next)=>{
+        const cafeId=req.cafe.id
+        const {id}=req.params
+        try {
+        const data=await serverService.deleteServerFromCoffee(cafeId,id)
+        if (data) res.status(200).json({status:'success',message:'server deleted',data})
+            
+        } catch (e) {
+        next(e)            
+        }
+    },
+    updateServerOfCoffe:async(req,res,next)=>{
+        const cafeId=req.cafe.id
+        const {id}=req.params
+        try {
+            const data=await serverService.updateServerCoffee(cafeId,id,req.validatedData.begin,req.validatedData.end)
+            if (data) res.status(200).json({status:'success',message:'server updated',data})
+            
+        } catch (e) {
+            next(e)
             
         }
     },
-    clearTablesServerOfCoffe:async(req,res)=>{
+    clearTablesServerOfCoffe:async(req,res,next)=>{
         const cafeId=req.cafe.id
-        const {id}=req.params
+        const {id}=req.validatedData
         const {number}=req.body
+        console.log(number,id,cafeId)
+        if (!Number(number)) return res.status({status:'fail',message:'id must be number'})
+
        
         if (!id||!number) return res.status(400).json('err')
         try {
-            const data=await Table.update(
-                { assignedTo: null },               // ✅ values
-      { where: { cafeId, assignedTo:id,number } } 
-    )
-            if (!data) return res.status(400).json('something wrong')
-            res.status(200).json('tables deleted')
+            const data=await serverService.clearTableServer(cafeId,id,number)
+        if (data) return res.status(200).json({status:'success',message:'table cleared',data})
             
         } catch (e) {
-            res.status(500).json('server error')
+            next(e)
             
         }
     },
-   assignTableToServer: async (req, res) => {
+   assignTableToServer: async (req, res,next) => {
   const cafeId = req.cafe.id;
   const { id } = req.params;
-  const { id: serverId } = req.body; // rename for clarity
+  const { id: serverId } = req.body
+  if (!Number.isInteger(serverId)) return res.status({status:'fail',message:'id must be number'})
 
-  if (!serverId || !id) {
-    return res.status(400).json("Missing table or server ID");
-  }
+
 
   try {
-    const tb=await Table.findOne({where:{cafeId, number: id}})
-    if (!tb) return res.status(400).json('table not found')
-    console.log(tb)
-    const [updatedCount] = await Table.update(
-      { assignedTo: parseInt(serverId) },               // ✅ values
-      { where: { cafeId, number: id } }       // ✅ condition
-    );
 
-    if (updatedCount === 0) {
-      return res.status(404).json("No table found or nothing updated");
+    const updatedCount = await serverService.assignTableToServer(cafeId,id,serverId)
+    if (updatedCount !== 0) {
+    res.status(200).json({ status: 'success', message: 'table assigned' })
+     
     }
 
-    res.status(200).json("Table assigned successfully");
   } catch (e) {
-    console.error("assignTableToServer error:", e);
-    res.status(500).json("Server error");
+   next(e)
 }
 },
 

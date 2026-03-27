@@ -17,7 +17,7 @@ const Item = sequelize.define("Item", {
     allowNull: false,
   },
   category: {
-    type: DataTypes.STRING, // ex: "boisson chaude", "dessert", "jus"
+    type: DataTypes.STRING, 
     allowNull: true,
   },
   stock:{
@@ -25,8 +25,12 @@ const Item = sequelize.define("Item", {
     allowNull:true,
   },
   imageUrl: {
-    type: DataTypes.STRING, // lien vers l’image (cappuccino, jus d’orange…)
+    type: DataTypes.STRING, 
     allowNull: true,
+  },
+  isDeleted:{
+    type:DataTypes.BOOLEAN,
+    defaultValue:false
   },
   cafeId: {
   type: DataTypes.INTEGER,

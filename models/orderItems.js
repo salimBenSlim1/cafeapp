@@ -11,6 +11,18 @@ const OrderItems = sequelize.define("OrderItems", {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
+  itemName: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  status: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  orderId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
   price: {
     type: DataTypes.FLOAT,
     allowNull: false,
@@ -19,6 +31,14 @@ const OrderItems = sequelize.define("OrderItems", {
     type: DataTypes.TEXT,
     allowNull: true,
   },
+  category: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  serverId:{
+    type:DataTypes.INTEGER,
+    allowNull:false
+  }
   
 });
 

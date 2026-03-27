@@ -1,17 +1,87 @@
 const Server = require("../models/servers")
 const jwt=require('jsonwebtoken')
-const { getIo } = require("../socket");
 const Table = require("../models/table");
 const Orders = require("../models/orders");
 const OrderItems = require("../models/orderItems");
 const Item = require("../models/item");
-const OrderAudit = require("../models/orderAudit");
 const { Op,literal } = require("sequelize");
-const sequelize=require('../db/db-config')
+const sequelize=require('../db/db-config');
+const Cafe = require("../models/cafe");
+const socketServer=require('../socket');
+const DailyCafeStat=require('../models/order_stats')
+const DailyItemStat=require('../models/items_stats')
+const WaiterDailyStat = require("../models/waiter_stats");
+
+function todayDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+ 
+/* ─────────────────────────────────────────────────────────────────
+   upsertIncrement — shared pattern used by all three stat tables.
+   Finds or creates the row identified by `where`, then increments
+   the numeric fields in `deltas` atomically.
+───────────────────────────────────────────────────────────────── */
+async function upsertIncrement(Model, where, defaults, deltas) {
+  const [row, created] = await Model.findOrCreate({ where, defaults: { ...where, ...defaults } });
+  if (!created) await row.increment(deltas);
+}
+ 
+/* ─────────────────────────────────────────────────────────────────
+   recordItemServed
+   Called once per OrderItem that flips to "served".
+   Writes to:  daily_item_stats  +  waiter_daily_stats
+───────────────────────────────────────────────────────────────── */
+async function recordItemServed({ cafeId, waiterId, waiterName, itemName, itemCategory, unitPrice, quantity }) {
+  const statDate = todayDate();
+  const revenue  = parseFloat((unitPrice * quantity).toFixed(2));
+ 
+  await Promise.all([
+    // 1. Global item snapshot
+    upsertIncrement(
+      DailyItemStat,
+      { cafeId, itemName, statDate },
+      { itemCategory: itemCategory || "", unitPrice, totalSold: quantity, totalRevenue: revenue },
+      { totalSold: quantity, totalRevenue: revenue },
+    ),
+ 
+    // 2. Per-waiter item snapshot
+    upsertIncrement(
+      WaiterDailyStat,
+      { cafeId, waiterId, itemName, statDate },
+      { waiterName: waiterName || "", itemCategory: itemCategory || "", totalSold: quantity, totalRevenue: revenue },
+      { totalSold: quantity, totalRevenue: revenue },
+    ),
+  ]);
+}
+ 
+/* ─────────────────────────────────────────────────────────────────
+   recordOrderServed
+   Called once when the entire order flips to "served".
+   Writes to:  daily_cafe_stats
+───────────────────────────────────────────────────────────────── */
+async function recordOrderServed({ cafeId, orderRevenue }) {
+  const statDate = todayDate();
+  const revenue  = parseFloat(orderRevenue.toFixed(2));
+ 
+  const [row, created] = await DailyCafeStat.findOrCreate({
+    where:    { cafeId, statDate },
+    defaults: { cafeId, totalRevenue: revenue, totalOrders: 1, avgOrderValue: revenue, statDate },
+  });
+ 
+  if (!created) {
+    await row.increment({ totalRevenue: revenue, totalOrders: 1 });
+    await row.reload();
+    await row.update({
+      avgOrderValue: parseFloat((parseFloat(row.totalRevenue) / row.totalOrders).toFixed(2)),
+    });
+  }
+}
 module.exports={
 
 
   serverLogin: async (req, res) => {
+    
     const { id } = req.params; // café id
     const { name, password } = req.body;
 
@@ -35,12 +105,16 @@ module.exports={
 
       // 4️⃣ Prepare array of table IDs
       const tableIds = tables.map((t) => t.number);
-
+      const caffe=await Cafe.findOne({where:{id}})
+      if (caffe.subscriptionEndDate<Date.now()){
+        return res.status(401).json('unauthorized')
+      }
       // 5️⃣ Sign JWT with role, serverId, cafeId, and tables
       const token = jwt.sign(
         {
           role: "server",
           serverId: server.id,
+          name:server.name,
           cafeId: id,
           tables: tableIds,
         },
@@ -53,6 +127,7 @@ module.exports={
         message: "Server login successful",
         serverToken: token,
         id: server.id,
+        name: server.name,
         tables: tableIds,
       });
     } catch (e) {
@@ -60,57 +135,336 @@ module.exports={
       res.status(500).json({ error: "Internal server error" });
     }
   },
-  getAllOrders: async (req, res) => {
+getAllOrders: async (req, res, next) => {
+  const limit  = 10;
+  const page   = parseInt(req.query.page) || 1;
+  const cafeId = req.server.cafeId;
+  const offset = (page - 1) * limit;
+  const since  = new Date(Date.now() - 10 * 60 * 60 * 1000)
+                   .toISOString().slice(0, 19).replace('T', ' ');
+
+  const [rows, countResult] = await Promise.all([
+    sequelize.query(`
+      SELECT
+        o.id,
+        o.totalPrice,
+        o.status,
+        o.createdAt,
+        o.updatedAt,
+        o.tableNumber,
+        oi.id       AS oi_id,
+        oi.quantity AS oi_quantity,
+        oi.price    AS oi_price,
+        oi.comment  AS oi_comment,
+        oi.itemName AS oi_itemName,
+        oi.status AS oi_status,
+        oi.createdAt AS oi_createdAt
+      FROM (
+        SELECT id, totalPrice, status, createdAt, updatedAt, tableNumber
+        FROM Orders
+        WHERE cafeId    = :cafeId
+        AND updatedAt>=:since
+        ORDER BY updatedAt DESC
+        LIMIT :limit OFFSET :offset
+      ) o
+      LEFT JOIN OrderItems oi ON oi.orderId = o.id
+    `, {
+      replacements: { cafeId, since, limit, offset },
+      type: sequelize.QueryTypes.SELECT,
+    }),
+    sequelize.query(`
+      SELECT COUNT(*) AS total
+      FROM Orders
+      WHERE cafeId    = :cafeId
+      AND updatedAt >= :since
+        
+    `, {
+      replacements: { cafeId, since },
+      type: sequelize.QueryTypes.SELECT,
+    }),
+  ]);
+
+  const total = parseInt(countResult[0].total);
+
+  const ordersMap = new Map();
+  for (const row of rows) {
+    if (!ordersMap.has(row.id)) {
+      ordersMap.set(row.id, {
+        id:          row.id,
+        totalPrice:  row.totalPrice,
+        status:      row.status,
+        createdAt:   row.createdAt,
+        updatedAt:   row.updatedAt,
+        tableNumber: row.tableNumber,
+        OrderItems:  [],
+      });
+    }
+    if (row.oi_id) {
+      ordersMap.get(row.id).OrderItems.push({
+        id:       row.oi_id,
+        quantity: row.oi_quantity,
+        price:    row.oi_price,
+        comment:  row.oi_comment,
+        itemName: row.oi_itemName,
+        status: row.oi_status,
+        createdAt: row.oi_createdAt,
+      });
+    }
+  }
+
+  res.status(200).json({
+    orders:     [...ordersMap.values()],
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+  });
+},
+getAllOrdersBarman: async (req, res, next) => {
+  const limit  = 10;
+  const page   = parseInt(req.query.page) || 1;
+  const cafeId = req.server.cafeId;
+  const offset = (page - 1) * limit;
+  const since  = new Date(Date.now() - 10 * 60 * 60 * 1000)
+                   .toISOString().slice(0, 19).replace('T', ' ');
+
+  const [rows, countResult] = await Promise.all([
+    sequelize.query(`
+      SELECT
+        o.id,
+        o.totalPrice,
+        o.status,
+        o.createdAt,
+        o.updatedAt,
+        o.tableNumber,
+        oi.id       AS oi_id,
+        oi.quantity AS oi_quantity,
+        oi.price    AS oi_price,
+        oi.comment  AS oi_comment,
+        oi.itemName AS oi_itemName,
+        oi.status AS oi_status,
+        oi.category  AS oi_category ,
+        oi.createdAt AS oi_createdAt
+      FROM (
+        SELECT id, totalPrice, status, createdAt, updatedAt, tableNumber
+        FROM Orders
+        WHERE cafeId    = :cafeId
+        AND updatedAt>=:since
+        AND status IN ('pending', 'preparing')
+        ORDER BY updatedAt ASC
+        LIMIT :limit OFFSET :offset
+      ) o
+      LEFT JOIN OrderItems oi ON oi.orderId = o.id
+    `, {
+      replacements: { cafeId, since, limit, offset },
+      type: sequelize.QueryTypes.SELECT,
+    }),
+    sequelize.query(`
+      SELECT COUNT(*) AS total
+      FROM Orders
+      WHERE cafeId    = :cafeId
+      AND updatedAt >= :since
+      AND status !='served'
+        
+    `, {
+      replacements: { cafeId, since },
+      type: sequelize.QueryTypes.SELECT,
+    }),
+  ]);
+
+  const total = parseInt(countResult[0].total);
+
+  const ordersMap = new Map();
+  for (const row of rows) {
+    if (!ordersMap.has(row.id)) {
+      ordersMap.set(row.id, {
+        id:          row.id,
+        totalPrice:  row.totalPrice,
+        status:      row.status,
+        createdAt:   row.createdAt,
+        updatedAt:   row.updatedAt,
+        tableNumber: row.tableNumber,
+        OrderItems:  [],
+      });
+    }
+    if (row.oi_id) {
+      ordersMap.get(row.id).OrderItems.push({
+        id:       row.oi_id,
+        quantity: row.oi_quantity,
+        price:    row.oi_price,
+        comment:  row.oi_comment,
+        itemName: row.oi_itemName,
+        status: row.oi_status,
+        category:  row.oi_category, 
+        createdAt: row.oi_createdAt,
+      });
+    }
+  }
+
+  res.status(200).json({
+    orders:     [...ordersMap.values()],
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+  });
+},
+
+addOrderForTable: async (req, res) => {
+  const { tableNumber, items } = req.body;
+  const { serverId, cafeId } = req.server;
+
+  if (!Array.isArray(items) || items.length === 0)
+    return res.status(400).json({ error: 'Items required' });
+
+  const transaction = await sequelize.transaction();
+
   try {
-    const orders = await Orders.findAll({
-      where:{cafeId:req.server.cafeId},
-      include: [
-        {
-          model: OrderItems,attributes:['id','quantity','price','comment'],
-          include: [{ model: Item,attributes:['name','imageUrl','category'] }],
-        },
-        {model:Table,attributes:['number']}
-      ],
-     
+    let table=await Table.update({status:'occupé',sessionStart:new Date()},{where:{number:tableNumber,assignedTo:serverId},transaction})
+
+    let order = await Orders.findOne({
+      where: { tableNumber, cafeId, status: 'pending' },
+      lock: transaction.LOCK.UPDATE,
+      transaction
     });
-   
-    res.status(200).json(orders);
-  } catch (e) {
-    res.status(500).json({
-      message: "Internal server error",
-      error: e.message,
+
+    if (!order) {
+      order = await Orders.create(
+        { tableNumber, cafeId, status: 'pending', totalPrice: 0 },
+        { transaction }
+      );
+    }
+
+    const dbItems = await Item.findAll({
+      where: { id: items.map(i => i.itemId), cafeId },
+      lock: transaction.LOCK.UPDATE,
+      transaction
     });
+
+    const itemMap = new Map(dbItems.map(i => [i.id, i]));
+    let totalAddition = 0;
+    const createdItems = [];
+
+for (const it of items) {
+      const item = itemMap.get(it.itemId);
+      if (!item) throw new Error(`Item not found: ${it.itemId}`);
+      if (item.stock < it.quantity) throw new Error(`${item.name} out of stock`);
+
+      const orderItem = await OrderItems.create({
+        orderId:  order.id,
+        serverId:serverId,
+        itemName: item.name,
+        quantity: it.quantity,
+        price:    item.price,
+        category: item.category,
+        comment:  it.comment || '',
+        status:   'pending',
+      }, { transaction });
+
+      await item.update(
+        { stock: Math.max(item.stock - it.quantity, 0) },
+        { transaction }
+      );
+
+      totalAddition += it.quantity * item.price;
+
+     createdItems.push({   
+  id:orderItem.id,   
+  itemName:  item.name,
+  quantity:  it.quantity,
+  comment:   it.comment || null, 
+  category:  item.category,               
+  createdAt: orderItem.createdAt,
+});
+      // ← no socket call here
+    }
+
+    const newTotal = Number(order.totalPrice) + totalAddition;
+
+    await order.update({ totalPrice: newTotal }, { transaction });
+    await transaction.commit();
+
+    // Single emit, after commit, with complete data
+    socketServer.emitToCafe(cafeId, 'newOrder', {
+      id:          order.id,
+      tableNumber:order.tableNumber,
+      createdAt:   order.createdAt,
+      totalPrice:  newTotal,
+      OrderItems:  createdItems,
+    });
+    
+    return res.status(201).json({ message: 'Order added'});
+  } catch (err) {
+    await transaction.rollback();
+    console.error('addOrderForTable error:', err);
+    const isStock = err.message.includes('out of stock');
+    return res.status(isStock ? 409 : 500).json({ error: err.message });
   }
 },
-updateOrderStatus: async (req, res) => {
-  const { id } = req.params;
-  const { status, tableId } = req.body;
-  const {serverId,cafeId}=req.server
+
+// PUT /server/updateOrderItemStatus/:orderItemId
+// updateOrderItemStatus controller — add all-served check
+ updateOrderItemStatus : async (req, res) => {
+  const { orderItemId } = req.params;
+  const { status, orderId } = req.body;
+  const cafeId = req.server.cafeId;
+ 
+  const VALID = ["preparing", "served"];
+  if (!VALID.includes(status))
+    return res.status(400).json({ error: "Invalid status" });
+ 
   try {
-    if (!status || !tableId || !id) 
-      return res.status(400).json('Missing parameters');
-
-    // Find order
-    const order = await Orders.findOne({ where: { id } });
-    if (!order) return res.status(404).json('Order not found');
-    if (!req.server.tables.includes(String(tableId))) {
-    return res.status(400).json({ error: "Unauthorized: table not assigned to this server" });
-}   
-  // Update status
-    await Orders.update({ status }, { where: { id } });
-
-    getIo().to(`user_${id}`).emit("statusUpdated", { orderId: id, status });
-    getIo().to(`cafe_${req.server.cafeId}`).emit("orderStatusUpdated", {
-      orderId: id,
+    // ── 1. Load the order item
+    const orderItem = await OrderItems.findOne({ where: { id: orderItemId, orderId } });
+    if (!orderItem) return res.status(404).json({ error: "Item not found" });
+ 
+    const wasAlreadyServed = orderItem.status === "served";
+ 
+    // ── 2. Persist the status change
+    await orderItem.update({ status });
+ 
+    // ── 3. Broadcast to barman devices
+    socketServer.emitToCafe(cafeId, "barman:itemStatusChanged", {
+      orderId,
+      orderItemId: Number(orderItemId),
       status,
-      tableId,
     });
-
-    return res.status(200).json('Status updated successfully');
-
-  } catch (e) {
-    console.error('updateOrderStatus error:', e);
-    return res.status(500).json({ 'server error': e.message });
+ 
+    // ── 4. Record item-level stats when it first hits "served"
+    if (status === "served" && !wasAlreadyServed) {
+      recordItemServed({
+        cafeId,
+        waiterId:     orderItem.serverId,
+        itemName:     orderItem.itemName     ?? "Unknown",
+        itemCategory: orderItem.itemCategory ?? "",
+        unitPrice:    parseFloat(orderItem.price ?? 0),
+        quantity:     orderItem.quantity ?? 1,
+      }).catch(err => console.error("recordItemServed failed:", err));
+    }
+ 
+    // ── 5. Check if the whole order is now complete
+    const pendingCount = await OrderItems.count({
+      where: { orderId, status: { [Op.ne]: "served" } },
+    });
+ 
+    if (pendingCount === 0) {
+      // ── 5a. Mark order as served
+      await Orders.update({ status: "served" }, { where: { id: orderId } });
+ 
+      // ── 5b. Broadcast completion
+      socketServer.emitToCafe(cafeId, "orderStatusUpdated", { id: orderId, status: "served" });
+ 
+      // ── 5c. Record cafe-level stat
+      const order = await Orders.findOne({ where: { id: orderId }, attributes: ["totalPrice"] });
+      const orderRevenue = parseFloat(order?.totalPrice ?? 0);
+ 
+      recordOrderServed({ cafeId, orderRevenue })
+        .catch(err => console.error("recordOrderServed failed:", err));
+    }
+ 
+    return res.status(200).json({ ok: true });
+ 
+  } catch (err) {
+    console.error("updateOrderItemStatus error:", err);
+    return res.status(500).json({ error: err.message });
   }
 },
 serverUpdateOrder: async (req, res) => {
@@ -129,24 +483,9 @@ serverUpdateOrder: async (req, res) => {
     if (!orderItem)
       return res.status(404).json("❌ Order item not found or unauthorized");
 
-    // 🟠 Save old quantity before changing
     const oldQuantity = orderItem.quantity;
-
-    // 🔵 Update the quantity
     orderItem.quantity = quantity;
     await orderItem.save();
-
-    // 🟣 Log in OrderAudit
-    await OrderAudit.create({
-      orderId: orderItem.orderId,
-      serverId,
-      cafeId,
-      action: "CHANGE_QUANTITY",
-      oldValue: { quantity: oldQuantity },
-      newValue: { quantity },
-    });
-
-    // 🟢 Recalculate total price
     const orderItems = await OrderItems.findAll({
       where: { orderId: orderItem.orderId },
     });
@@ -167,464 +506,52 @@ serverUpdateOrder: async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 },
-generateServerReport: async (req, res) => {
+ generateServerReport : async (req, res) => {
   try {
-    const { serverId } = req.params;
-    const cafeId = req.cafe.id;
-    
-    // 1️⃣ Verify server exists
-    const server = await Server.findOne({
-      where: { id: serverId, cafeId },
+    const cafeId   = req.cafe.id;
+    const waiterId = req.params.serverId
+    const statDate = req.query.date || new Date().toISOString().slice(0, 10);
+ 
+    // Verify the waiter belongs to this cafe
+    const waiter = await Server.findOne({
+      where:      { id: waiterId, cafeId },
       attributes: ["id", "name"],
     });
-    
-    if (!server) {
-      return res.status(404).json({ error: "Server not found" });
-    }
-
-    // 2️⃣ Get tables assigned to this server
-    const serverTables = await Table.findAll({
-      where: { 
-        assignedTo: serverId,
-        cafeId 
-      },
-      attributes: ["id", "number"],
+    if (!waiter) return res.status(404).json({ error: "Waiter not found" });
+ 
+    // Pull all item rows for this waiter on this day
+    const rows = await WaiterDailyStat.findAll({
+      where:    { cafeId, waiterId, statDate },
+      attributes: ["itemName", "itemCategory", "totalSold", "totalRevenue"],
+      order:    [["totalRevenue", "DESC"]],
+      raw:      true,
     });
-
-    if (serverTables.length === 0) {
-      return res.json({
-        cafeName: req.cafe.name,
-        serverName: server.name,
-        totalDay: 0,
-        ordersCount: 0,
-        orders: [],
-        cancellations: {
-          count: 0,
-          totalLost: 0,
-          details: []
-        },
-        modifications: {
-          count: 0,
-          totalImpact: 0,
-          details: []
-        },
-        assignedTables: [],
-        potentialRevenue: 0,
-        message: "No tables assigned to this server"
-      });
-    }
-
-    const tableIds = serverTables.map(t => t.id);
-
-    // 3️⃣ Define day time range (6am to 6am next day)
-    const today = new Date();
-    const startOfDay = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-      6, 0, 0, 0
-    );
-    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-
-    // 4️⃣ Get all served orders from server's tables
-    const orders = await Orders.findAll({
-      where: {
-        tableId: { [Op.in]: tableIds },
-        cafeId,
-        status: "served",
-        createdAt: { [Op.between]: [startOfDay, endOfDay] },
-      },
-      include: [
-        {
-          model: OrderItems,
-          include: [{ model: Item, attributes: ["name"] }],
-          attributes: ["quantity", "price"],
-        },
-        { model: Table, attributes: ["number"] },
-      ],
-      order: [["createdAt", "ASC"]],
-    });
-
-    // 5️⃣ Group items by table
-    let totalDay = 0;
-    const groupedByTable = {};
-
-    orders.forEach(order => {
-      const tableNumber = order.Table?.number || "-";
-      
-      if (!groupedByTable[tableNumber]) {
-        groupedByTable[tableNumber] = {
-          tableNumber,
-          items: {},
-          ordersCount: 0,
-          totalTable: 0
-        };
-      }
-
-      groupedByTable[tableNumber].ordersCount++;
-
-      order.OrderItems.forEach(item => {
-        const itemName = item.Item.name;
-        const itemPrice = item.price;
-        const itemQuantity = item.quantity;
-        const itemTotal = itemQuantity * itemPrice;
-
-        if (!groupedByTable[tableNumber].items[itemName]) {
-          groupedByTable[tableNumber].items[itemName] = {
-            name: itemName,
-            quantity: 0,
-            price: itemPrice,
-          };
-        }
-
-        groupedByTable[tableNumber].items[itemName].quantity += itemQuantity;
-        groupedByTable[tableNumber].totalTable += itemTotal;
-        totalDay += itemTotal;
-      });
-    });
-
-    const formattedOrders = Object.values(groupedByTable).map(table => ({
-      tableNumber: table.tableNumber,
-      ordersCount: table.ordersCount,
-      items: Object.values(table.items),
-      total: parseFloat(table.totalTable.toFixed(3)),
-    }));
-
-    // 6️⃣ Get cancellations with details
-    const canceledOrders = await Orders.findAll({
-      where: {
-        tableId: { [Op.in]: tableIds },
-        cafeId,
-        status: "canceled",
-        updatedAt: { [Op.between]: [startOfDay, endOfDay] },
-      },
-      attributes: ["id", "updatedAt", "totalPrice"],
-      include: [
-        { 
-          model: Table, 
-          attributes: ["number"] 
-        },
-        {
-          model: OrderItems,
-          include: [{ model: Item, attributes: ["name"] }],
-          attributes: ["quantity", "price"],
-        },
-      ],
-      order: [["updatedAt", "DESC"]],
-    });
-   
-    const cancellations = canceledOrders.map(order => ({
-      orderId: order.id,
-      tableNumber: order.Table?.number || "-",
-      time: new Date(order.updatedAt).toLocaleTimeString('fr-TN', {
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      items: order.OrderItems.map(item => ({
-        name: item.Item.name,
-        quantity: item.quantity,
-        price: item.price
+ 
+    const totalItems   = rows.reduce((s, r) => s + r.totalSold,              0);
+    const totalRevenue = rows.reduce((s, r) => s + parseFloat(r.totalRevenue), 0);
+ 
+    return res.json({
+      waiterId:    waiter.id,
+      waiterName:  waiter.name,
+      statDate,
+      items:       rows.map(r => ({
+        itemName:     r.itemName,
+        itemCategory: r.itemCategory,
+        totalSold:    r.totalSold,
+        totalRevenue: parseFloat(parseFloat(r.totalRevenue).toFixed(2)),
       })),
-      totalLost: parseFloat(order.totalPrice?.toFixed(3) || 0),
-    }));
-
-    // Calculate total losses from cancellations
-    const totalCancellations = cancellations.reduce((sum, c) => sum + c.totalLost, 0);
-
-    // 7️⃣ Get all modifications from the audit table
-    const modifications = await OrderAudit.findAll({
-      where: {
-        serverId,
-        cafeId,
-        action: "CHANGE_QUANTITY",
-        createdAt: { [Op.between]: [startOfDay, endOfDay] },
+      summary: {
+        totalItems,
+        totalRevenue: parseFloat(totalRevenue.toFixed(2)),
       },
-      attributes: ["orderId", "oldValue", "newValue", "createdAt"],
-      order: [["createdAt", "DESC"]],
     });
-
-    // Initialize modifications result
-    let modificationsResult = {
-      count: 0,
-      totalImpact: 0,
-      details: []
-    };
-
-    // Only process if modifications exist
-    if (modifications.length > 0) {
-      // Extract all order IDs
-      const modifiedOrderIds = [...new Set(modifications.map(m => m.orderId))];
-
-      // Fetch related orders with tables and items
-      const modifiedOrders = await Orders.findAll({
-        where: { id: { [Op.in]: modifiedOrderIds } },
-        include: [
-          { model: Table, attributes: ["number"] },
-          {
-            model: OrderItems,
-            include: [{ model: Item, attributes: ["name"] }],
-            attributes: ["id", "quantity", "price"],
-          },
-        ],
-      });
-
-      // Create fast access map
-      const orderMap = {};
-      for (const order of modifiedOrders) {
-        orderMap[order.id] = order;
-      }
-
-      // Format the audit data
-      const formattedModifications = modifications.map(mod => {
-        // Try parsing JSON values safely
-        let oldVal = typeof mod.oldValue === "string" ? JSON.parse(mod.oldValue) : mod.oldValue;
-        let newVal = typeof mod.newValue === "string" ? JSON.parse(mod.newValue) : mod.newValue;
-
-        const oldQty = oldVal?.quantity || 0;
-        const newQty = newVal?.quantity || 0;
-        const diff = newQty - oldQty;
-
-        const order = orderMap[mod.orderId];
-        let itemName = "Unknown";
-        let itemPrice = 0;
-
-        // Try to find the specific item modified by comparing quantities
-        if (order?.OrderItems?.length) {
-          const found = order.OrderItems.find(i => i.quantity === newQty) || order.OrderItems[0];
-          itemName = found?.Item?.name || itemName;
-          itemPrice = found?.price || 0;
-        }
-
-        const priceImpact = diff * itemPrice;
-
-        return {
-          orderId: mod.orderId,
-          tableNumber: order?.Table?.number || "-",
-          time: new Date(mod.createdAt).toLocaleTimeString("fr-TN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          itemName,
-          oldQuantity: oldQty,
-          newQuantity: newQty,
-          difference: diff,
-          priceImpact: parseFloat(priceImpact.toFixed(3)),
-        };
-      });
-
-      // Total impact
-      const totalModificationsImpact = formattedModifications.reduce(
-        (sum, m) => sum + m.priceImpact,
-        0
-      );
-
-      modificationsResult = {
-        count: formattedModifications.length,
-        totalImpact: parseFloat(totalModificationsImpact.toFixed(3)),
-        details: formattedModifications,
-      };
-    }
-
-    // 8️⃣ Final response with detailed statistics
-    res.json({
-      cafeName: req.cafe.name,
-      serverName: server.name,
-      
-      // General statistics
-      totalDay: parseFloat(totalDay.toFixed(3)),
-      ordersCount: orders.length,
-      tablesServed: formattedOrders.length,
-      
-      // Order details grouped by table
-      orders: formattedOrders,
-      
-      // Detailed cancellations
-      cancellations: {
-        count: cancellations.length,
-        totalLost: parseFloat(totalCancellations.toFixed(3)),
-        details: cancellations,
-      },
-      
-      // Detailed modifications
-      modifications: modificationsResult,
-      
-      // Assigned tables
-      assignedTables: serverTables.map(t => t.number),
-      
-      // Potential revenue calculation (with cancellations)
-      potentialRevenue: parseFloat((totalDay + totalCancellations).toFixed(3)),
-    });
-
-  } catch (error) {
-    console.error("Error generating report:", error);
-    res.status(500).json({ 
-      error: "Server error while generating report",
-      details: error.message 
-    });
+ 
+  } catch (err) {
+    console.error("getWaiterReport error:", err);
+    return res.status(500).json({ error: 'err' });
   }
 },
-// In your server routes file
-addOrderForTable: async (req, res) => {
-  const { tableNumber, items } = req.body;
-  const serverId = req.server.serverId; // from server token
-  const cafeId = req.server.cafeId;
-  const transaction = await sequelize.transaction();
 
-  try {
-    // Validate input
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Invalid items array' });
-    }
-
-    // Find table assigned to this server
-    const table = await Table.findOne({
-  where: { 
-    number: String(tableNumber),
-    cafeId: String(cafeId),
-    assignedTo: String(serverId)
-  }
-});
-
-
-    if (!table) {
-      await transaction.rollback();
-      return res.status(403).json({ 
-        error: 'This table is not assigned to you'
-      });
-    }
-
-    // Pre-fetch all items with stock check
-    const itemIds = items.map(it => it.itemId);
-    const existingItems = await Item.findAll({
-      where: { 
-        id: itemIds,
-        cafeId
-      },
-      lock: transaction.LOCK.UPDATE,
-      transaction
-    });
-
-    // Validate stock
-    const itemMap = new Map(existingItems.map(item => [item.id, item]));
-    for (const orderItem of items) {
-      const item = itemMap.get(orderItem.itemId);
-      if (!item) {
-        await transaction.rollback();
-        return res.status(404).json({ 
-          error: `Item ${orderItem.itemId} not found`
-        });
-      }
-      if (item.stock < orderItem.quantity) {
-        await transaction.rollback();
-        return res.status(400).json({
-          error: `Insufficient stock for ${item.name}. Available: ${item.stock}`
-        });
-      }
-    }
-
-    // Find or create order
-    const [order, created] = await Orders.findOrCreate({
-      where: {
-        tableId: table.id,
-        cafeId,
-        status: {
-          [Op.notIn]: ['served', 'canceled']
-        }
-      },
-      defaults: {
-        totalPrice: 0,
-        status: 'pending'
-      },
-      transaction
-    });
-
-    // Process items
-    let total = order.totalPrice || 0;
-    const orderItemsToCreate = [];
-    const stockUpdates = [];
-
-    for (const it of items) {
-      const item = itemMap.get(it.itemId);
-      
-      let orderItem = await OrderItems.findOne({
-        where: {
-          orderId: order.id,
-          itemId: it.itemId
-        },
-        transaction
-      });
-
-      const newQuantity = orderItem ? orderItem.quantity + it.quantity : it.quantity;
-
-      if (orderItem) {
-        await orderItem.update({
-          quantity: newQuantity,
-          comment: it.comment || orderItem.comment
-        }, { transaction });
-      } else {
-        orderItemsToCreate.push({
-          quantity: it.quantity,
-          price: item.price,
-          itemId: item.id,
-          orderId: order.id,
-          comment: it.comment || ''
-        });
-      }
-
-      stockUpdates.push(
-        Item.update(
-          { 
-            stock: literal(`stock - ${it.quantity}`),
-            updatedAt: new Date()
-          },
-          { 
-            where: { 
-              id: it.itemId,
-              stock: { [Op.gte]: it.quantity }
-            },
-            transaction
-          }
-        )
-      );
-      
-      total += it.quantity * item.price;
-      
-      if (item.stock - it.quantity < 3) {
-        getIo().to(`cafe_${cafeId}`).emit("newAlert", {
-          name: item.name,
-          stock: item.stock - it.quantity
-        });
-      }
-    }
-
-    if (orderItemsToCreate.length > 0) {
-      await OrderItems.bulkCreate(orderItemsToCreate, { transaction });
-    }
-
-    await Promise.all(stockUpdates);
-    await order.update({ totalPrice: total }, { transaction });
-    await transaction.commit();
-
-    // Emit socket event
-    getIo().to(`cafe_${cafeId}`).emit("newOrder", {
-      ...order.toJSON(),
-      items: orderItemsToCreate
-    });
-
-    return res.status(201).json({
-      message: "Order added successfully",
-      orderId: order.id
-    });
-
-  } catch (error) {
-    await transaction.rollback();
-    console.error('Order creation error:', error);
-    return res.status(500).json({
-      error: "Internal server error",
-      message: error.message
-    });
-  }
-},
 
 
 getItems: async (req, res) => {
@@ -654,7 +581,7 @@ getTables: async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-},
+}
 
 };
 
