@@ -3,58 +3,51 @@ const jwt        = require("jsonwebtoken");
 
 const JWT_SECRET        = process.env.JWT_SECRET;
 const SERVER_JWT_SECRET = process.env.SERVER_JWT_SECRET || JWT_SECRET;
+const USER_JWT_SECRET   = process.env.USER_JWT_SECRET   || JWT_SECRET; // ← add to your .env
 
-/* ─────────────────────────────────────────────────────────────────
-   extractCafeId — tries every common field name for cafeId.
-   Add yours here if it's different.
-───────────────────────────────────────────────────────────────── */
 function extractCafeId(p) {
   const raw =
-    p.cafeId    ??   // { cafeId: 4 }
-    p.cafe_id   ??   // { cafe_id: 4 }
-    p.cafe?.id  ??   // { cafe: { id: 4 } }
-    p.CafeId    ??   // Sequelize default pascal
-    p.id??
+    p.cafeId   ??
+    p.cafe_id  ??
+    p.cafe?.id ??
+    p.CafeId   ??
+    p?.id       ??
+    // ← REMOVED p.id fallback — it was returning userId as cafeId
     null;
   return raw != null ? String(raw) : null;
 }
 
-/* ─────────────────────────────────────────────────────────────────
-   verifyToken — returns { userId, role, cafeId } or null.
-   cafeId MAY be null if the token is valid but doesn't embed it —
-   the client will send it via joinCafe instead.
-───────────────────────────────────────────────────────────────── */
 function verifyToken(token) {
   if (!token) return null;
 
-  // Try admin token
+  // ── 1. Admin token ───────────────────────────────────────────
   try {
     const p = jwt.verify(token, JWT_SECRET);
     if (p?.id || p?.userId) {
       const cafeId = extractCafeId(p);
-      // Log once so you can see the actual payload field names in dev
-      if (!cafeId) console.warn('[socket] admin token has no cafeId field — payload keys:', Object.keys(p));
-      return {
-        userId: p.id ?? p.userId,
-        role:   p.role ?? 'admin',
-        cafeId,               // may be null — joinCafe fallback handles it
-        verified: true,
-      };
+      if (!cafeId) console.warn('[socket] admin token missing cafeId — keys:', Object.keys(p));
+      return { userId: p.id ?? p.userId, role: p.role ?? 'admin', cafeId, verified: true };
     }
   } catch (_) {}
 
-  // Try server (waiter / barman) token
+  // ── 2. Waiter / barman token ─────────────────────────────────
   try {
-    const p = jwt.verify(token, SERVER_JWT_SECRET);
+    const p = jwt.verify(token, JWT_SECRET);
     if (p?.id || p?.serverId) {
       const cafeId = extractCafeId(p);
-      if (!cafeId) console.warn('[socket] server token has no cafeId field — payload keys:', Object.keys(p));
-      return {
-        userId: p.id ?? p.serverId,
-        role:   p.role ?? 'waiter',
-        cafeId,
-        verified: true,
-      };
+      if (!cafeId) console.warn('[socket] server token missing cafeId — keys:', Object.keys(p));
+      return { userId: p.id ?? p.serverId, role: p.role ?? 'waiter', cafeId, verified: true };
+    }
+  } catch (_) {}
+
+  // ── 3. Customer / user token ─────────────────────────────────
+  try {
+    const p = jwt.verify(token, JWT_SECRET);
+    // adjust these field checks to match whatever your user JWT contains
+    if (p?.id || p?.userId) {
+      const cafeId = extractCafeId(p);
+      if (!cafeId) console.warn('[socket] user token missing cafeId — keys:', Object.keys(p));
+      return { userId: p.id ?? p.userId, role: 'user', cafeId, verified: true };
     }
   } catch (_) {}
 
@@ -76,9 +69,6 @@ class SocketService {
       transports: ["websocket", "polling"],
     });
 
-    // ── JWT handshake middleware ─────────────────────────────────
-    // Accepts any valid JWT (admin or server).
-    // Rejects only if the token is completely missing or invalid.
     this.#io.use((socket, next) => {
       const token =
         socket.handshake.auth?.token ||
@@ -88,14 +78,14 @@ class SocketService {
       const user = verifyToken(token);
 
       if (!user) {
-        console.warn('[socket] rejected — invalid/missing token');
+        console.warn('[socket] rejected — invalid/missing token from', socket.handshake.address);
         return next(new Error("UNAUTHORIZED"));
       }
 
       socket.userId   = user.userId;
       socket.role     = user.role;
-      socket.cafeId   = user.cafeId;   // may be null
-      socket.verified = true;           // token was valid
+      socket.cafeId   = user.cafeId;
+      socket.verified = true;
 
       next();
     });
@@ -106,7 +96,6 @@ class SocketService {
   }
 
   #handleConnection(socket) {
-    // Auto-join if cafeId was in the token
     if (socket.cafeId) {
       socket.join(`cafe_${socket.cafeId}`);
       console.log(`[socket] ${socket.role} ${socket.userId} auto-joined cafe_${socket.cafeId}`);
@@ -114,26 +103,19 @@ class SocketService {
 
     socket.on("joinCafe", ({ cafeId }) => this.#joinCafe(socket, cafeId));
     socket.on("userJoin", ({ id })     => this.#joinUser(socket, id));
-    socket.on("disconnect", ()         => console.log(`[socket] ${socket.role ?? "?"} ${socket.userId ?? socket.id} disconnected`));
+    socket.on("disconnect", () =>
+      console.log(`[socket] ${socket.role ?? "?"} ${socket.userId ?? socket.id} disconnected`)
+    );
   }
 
   #joinCafe(socket, cafeId) {
     if (!cafeId) return;
-
-    // If the token already has a cafeId, enforce it matches
     if (socket.cafeId && String(cafeId) !== String(socket.cafeId)) {
       console.warn(`[socket] ${socket.id} tried to join cafe_${cafeId} but token says cafe_${socket.cafeId} — rejected`);
       return;
     }
-
-    // Token is valid but had no cafeId — trust the client-sent value
-    // (the token itself was still verified, so this is safe)
-    if (!socket.cafeId) {
-      socket.cafeId = String(cafeId);
-    }
-
+    if (!socket.cafeId) socket.cafeId = String(cafeId);
     socket.join(`cafe_${cafeId}`);
-    console.log(`[socket] ${socket.role} ${socket.userId} joined cafe_${cafeId} via joinCafe`);
   }
 
   #joinUser(socket, id) {

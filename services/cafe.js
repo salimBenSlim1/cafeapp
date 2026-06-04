@@ -3,13 +3,16 @@ const jwt=require('jsonwebtoken')
 const bcrypt=require('bcrypt');
 const { Op } = require("sequelize");
 class CafeService {
-    constructor({ cafeModel, tokenService,ordersModel,orderItemsModel,serverModel,tableModel }) {
+    constructor({ cafeModel, tokenService,ordersModel,orderItemsModel,serverModel,tableModel,waiterDailyModel,itemStatModel,orderStatModel }) {
         this.cafe = cafeModel;
         this.server=serverModel
         this.orders=ordersModel;
         this.ordersItems=orderItemsModel;
         this.table=tableModel;
         this.tokenService = tokenService;
+        this.itemStat=itemStatModel;
+        this.orderStat=orderStatModel;
+        this.waiterDaily=waiterDailyModel
     }
 
     /**
@@ -80,7 +83,6 @@ class CafeService {
         });
 
         const mapedIds = orders.map(o => o.id);
-        console.log(mapedIds)
         if (mapedIds.length > 0) {
             await this.ordersItems.destroy({
                 where: {
@@ -98,6 +100,9 @@ class CafeService {
         }
 
         await this.table.destroy({ where: { cafeId }, transaction: t });
+        await this.itemStat.destroy({ where: { cafeId }, transaction: t });
+        await this.orderStat.destroy({ where: { cafeId }, transaction: t });
+        await this.waiterDaily.destroy({ where: { cafeId }, transaction: t });
         await this.server.destroy({ where: { cafeId }, transaction: t });
         await this.cafe.destroy({ where: { id: cafeId }, transaction: t });
 

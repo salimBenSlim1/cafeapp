@@ -8,7 +8,8 @@ const DailyCafeStat  = require('../models/order_stats');
 const WaiterDailyStat = require('../models/waiter_stats');
 
 const socketServer = require("../socket");
-const OrderService=require('../services/order')
+const OrderService=require('../services/order');
+const { Op } = require("sequelize");
 const orderService=new OrderService({tableModel:Table,orderModel:Orders,orderItemsModel:OrderItems,itemModel:Item,sequelize})
 function todayDate() {
   const d = new Date();
@@ -236,6 +237,47 @@ getInsights: async (req, res) => {
       .json({ message: "Internal server error", error: err.message });
   }
 },
+// GET /api/orders/last?tableId=7&cafeId=abc123
+getLastOrder: async (req, res) => {
+  const { tableNumber, cafeId } = req.user;
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
+  try {
+    // Adjust model/field names to your ORM/schema
+    const order = await Orders.findOne({
+      where: { tableNumber, cafeId
+        // ,createdAt:{[Op.gte]:twoHoursAgo}
+       },
+      order: [['createdAt', 'DESC']],
+      include: [{ model: OrderItems}],
+    });
+
+    if (!order) return res.status(404).json({ error: 'No order found' });
+
+    const items = order.OrderItems.map(item => ({
+      id: item.id,
+      name: item.itemName,
+      qty: item.quantity,
+      unitPrice: item.price,
+      status:item.status,
+      subtotal: item.quantity * item.price,
+    }));
+
+    const total = items.reduce((sum, i) => sum + i.subtotal, 0);
+
+    res.json({
+      orderId: order.id,
+      status: order.status,       
+      tableId: order.tableNumber,
+      cafeId: order.cafeId,
+      createdAt: order.createdAt,
+      items,
+      total: parseFloat(total.toFixed(2)),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
 
 }

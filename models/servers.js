@@ -9,13 +9,17 @@ const Server = sequelize.define(
     begin: { type: DataTypes.TEXT, allowNull: true },
     end: { type: DataTypes.TEXT, allowNull: true },
     password: { type: DataTypes.TEXT, allowNull: false },
-    role: { type: DataTypes.TEXT, defaultValue: "server" },
+    role: { type: DataTypes.TEXT, defaultValue: "waiter" },
     cafeId: { type: DataTypes.INTEGER, allowNull: false },
   },
   {
     tableName: "server",
     freezeTableName: true,
     timestamps: true,
+    indexes:[{
+    fields:['cafeId'],
+    name:'idx_server_cafeId'
+  }]
   }
 );
 

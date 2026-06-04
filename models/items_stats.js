@@ -46,7 +46,7 @@ const DailyItemStat = sequelize.define("DailyItemStat", {
   indexes: [
     {
       unique: true,
-      fields: ["cafeId", "itemName", "statDate"],
+      fields: ["cafeId","itemName", "statDate"],
       name: "uq_item_day",
     },
   ],

@@ -47,10 +47,11 @@ module.exports = {
         tableId: table.id,
         tableNumber: table.number,
         cafeId: cafe.id,
+        id: cafe.id,
         cafeName: cafe.name,
       },
       process.env.JWT_SECRET,
-      { expiresIn: '4h' } // Session expires after 8 hours
+      { expiresIn: '2h' } 
     );
 
     res.json({

@@ -28,6 +28,10 @@ const Item = sequelize.define("Item", {
     type: DataTypes.STRING, 
     allowNull: true,
   },
+  description: {
+    type: DataTypes.TEXT, 
+    allowNull: true,
+  },
   isDeleted:{
     type:DataTypes.BOOLEAN,
     defaultValue:false
@@ -42,6 +46,14 @@ const Item = sequelize.define("Item", {
   allowNull: false,
 }
 
+},{
+  indexes: [
+    {
+      
+      fields: ["cafeId"],
+      name: "idx_item_cafeId",
+    },
+  ],
 });
 
 module.exports = Item;

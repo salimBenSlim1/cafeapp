@@ -97,38 +97,46 @@ module.exports={
         return res.status(401).json({ error: "Invalid password" });
       }
 
-      // 3️⃣ Get all tables assigned to this server
-      const tables = await Table.findAll({
-        where: { assignedTo: server.id }, // adjust field if needed
-        attributes: [ "number"],
-      });
-
-      // 4️⃣ Prepare array of table IDs
-      const tableIds = tables.map((t) => t.number);
       const caffe=await Cafe.findOne({where:{id}})
       if (caffe.subscriptionEndDate<Date.now()){
         return res.status(401).json('unauthorized')
       }
-      // 5️⃣ Sign JWT with role, serverId, cafeId, and tables
-      const token = jwt.sign(
+      let token
+      if (server.role==='barman'){
+      token = jwt.sign(
+        {
+          role: "barman",
+          serverId: server.id,
+          name:server.name,
+          cafeId: id,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "8h" } // optional expiry
+      );
+      }
+      else{
+        token = jwt.sign(
         {
           role: "server",
           serverId: server.id,
           name:server.name,
           cafeId: id,
-          tables: tableIds,
+        
         },
         process.env.JWT_SECRET,
         { expiresIn: "8h" } // optional expiry
       );
+      }
+      
 
       // 6️⃣ Respond with token + data
       res.status(200).json({
         message: "Server login successful",
         serverToken: token,
+        role:server.role,
         id: server.id,
         name: server.name,
-        tables: tableIds,
+       
       });
     } catch (e) {
       console.error("Server login error:", e);
@@ -370,6 +378,7 @@ for (const it of items) {
   id:orderItem.id,   
   itemName:  item.name,
   quantity:  it.quantity,
+  price:  item.price,
   comment:   it.comment || null, 
   category:  item.category,               
   createdAt: orderItem.createdAt,
@@ -567,7 +576,7 @@ getItems: async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 },
-getTables: async (req, res) => {
+getTables: async (req, res,next) => {
   try {
     const cafeId = req.server.cafeId;
     const serverId=req.server.serverId
@@ -579,7 +588,7 @@ getTables: async (req, res) => {
     });
     res.status(200).json(items);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+   next(error)
   }
 }
 

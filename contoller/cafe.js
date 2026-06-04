@@ -4,11 +4,17 @@ const Orders = require("../models/orders");
 const OrderItems = require("../models/orderItems");
 const Table = require("../models/table");
 const Server = require("../models/servers");
+const WaiterDaily=require('../models/waiter_stats')
+const ItemStat=require('../models/items_stats')
+const OrderStat=require('../models/order_stats')
 const sequelize = require("../db/db-config");
 const CafeService = require("../services/cafe");
 const TokenService = require("../services/token");
 const tokenService = new TokenService()
 const cafeService = new CafeService({
+  orderStatModel:OrderStat,
+  itemStatModel:ItemStat,
+  waiterDailyModel:WaiterDaily,
     cafeModel: Cafe,
     tokenService,
     ordersModel: Orders,
@@ -288,7 +294,6 @@ module.exports={
 
     updateCafe: async (req, res, next) => {
         const { id } = req.validatedData
-        console.log(id)
         try {
             await cafeService.updateCafe(id)
             res.status(200).json({ status: 'success', message: 'cafe updated' })
@@ -311,8 +316,9 @@ module.exports={
     refresh: async (req, res, next) => {
         const { refreshToken } = req.validatedData
         try {
-            const {data,id} = await cafeService.refresh(refreshToken)
-            res.status(200).json({ accessToken: data,id })
+            const {token,id} = await cafeService.refresh(refreshToken)
+           
+            res.status(200).json({ accessToken: token,id })
         } catch (e) {
             next(e)
         }
@@ -325,5 +331,9 @@ module.exports={
             path: '/'
         })
         res.json({ message: "Logged out" })
+    },
+    getId:async(req,res)=>{
+      const {id}=req.cafe
+      res.status(200).json(id)
     }
 }

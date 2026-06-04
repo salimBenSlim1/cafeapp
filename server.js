@@ -28,10 +28,13 @@ const router = require("./routes/cloudinary");
 const { refresh, logout } = require("./contoller/cafe");
 const globalerrorhandling = require("./globalerrorhandling");
 const validateCookie = require("./middleware/validateCookie");
+
 const { cookieSchema } = require("./validators/cookie.validator");
+const aiRouter = require("./routes/ai");
+const { getLastOrder } = require("./contoller/order");
 // Configure CORS to accept both localhost and ngrok
 app.use(cors({
- origin: ['http://localhost:3000'],
+ origin: ['http://localhost:3000',"https://api.anthropic.com/v1/messages"],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -53,9 +56,11 @@ app.use('/api',itemRoute)
 app.use('/api',orderRoute)
 app.use('/',functionRoute)
 app.use('/',userRoute)
+app.use('/',aiRouter)
 app.use('/api',tableRoute)
 app.use('/api',chartRoute)
 app.get('/getUserItems',verifyUser,getItemsForUser)
+app.get('/orders/last',verifyUser,getLastOrder)
 app.get('/start-session',startSession)
 app.use('/api',router)
 app.use(globalerrorhandling)

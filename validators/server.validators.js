@@ -15,6 +15,10 @@ const serverSchema=joi.object({
     end:joi.number().required().messages({
         'number.base':'end must be a number',
         'any.required':'end is required'
+    }),
+    role:joi.string().required().messages({
+        'string.base':'role must be a string',
+        'any.required':'role is required'
     })
     
 })
