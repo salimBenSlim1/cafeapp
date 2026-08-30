@@ -24,20 +24,16 @@ class CafeService {
      * @returns {object} - { accessToken, refreshToken, cafe }
      */
     async login(email, password) {
-        // Find cafe by email
         const cafe = await this.cafe.findOne({ where: { email } });
 
-        // Check if cafe exists
         if (!cafe) {
             throw new AppError('Invalid email or password', 401);
         }
 
-        // Check password (direct comparison - consider using bcrypt in production)
         if (cafe.password !== password) {
             throw new AppError('Invalid email or password', 401);
         }
 
-        // Check subscription status
         const now = new Date();
         if (!cafe.subscriptionEndDate || now > new Date(cafe.subscriptionEndDate)) {
             throw new AppError('Your subscription has expired', 403);

@@ -3,7 +3,7 @@ const jwt        = require("jsonwebtoken");
 
 const JWT_SECRET        = process.env.JWT_SECRET;
 const SERVER_JWT_SECRET = process.env.SERVER_JWT_SECRET || JWT_SECRET;
-const USER_JWT_SECRET   = process.env.USER_JWT_SECRET   || JWT_SECRET; // ← add to your .env
+const USER_JWT_SECRET   = process.env.USER_JWT_SECRET   || JWT_SECRET;
 
 function extractCafeId(p) {
   const raw =
@@ -12,7 +12,6 @@ function extractCafeId(p) {
     p.cafe?.id ??
     p.CafeId   ??
     p?.id       ??
-    // ← REMOVED p.id fallback — it was returning userId as cafeId
     null;
   return raw != null ? String(raw) : null;
 }
@@ -20,7 +19,6 @@ function extractCafeId(p) {
 function verifyToken(token) {
   if (!token) return null;
 
-  // ── 1. Admin token ───────────────────────────────────────────
   try {
     const p = jwt.verify(token, JWT_SECRET);
     if (p?.id || p?.userId) {
@@ -30,7 +28,6 @@ function verifyToken(token) {
     }
   } catch (_) {}
 
-  // ── 2. Waiter / barman token ─────────────────────────────────
   try {
     const p = jwt.verify(token, JWT_SECRET);
     if (p?.id || p?.serverId) {
@@ -40,10 +37,8 @@ function verifyToken(token) {
     }
   } catch (_) {}
 
-  // ── 3. Customer / user token ─────────────────────────────────
   try {
     const p = jwt.verify(token, JWT_SECRET);
-    // adjust these field checks to match whatever your user JWT contains
     if (p?.id || p?.userId) {
       const cafeId = extractCafeId(p);
       if (!cafeId) console.warn('[socket] user token missing cafeId — keys:', Object.keys(p));

@@ -2,10 +2,6 @@ const DailyItemStat = require("../models/items_stats");
 const DailyCafeStat = require("../models/order_stats");
 const { fn, col, literal, Op } = require("sequelize");
 
-/* ─────────────────────────────────────────
-   Helper — build date range from preset
-   Presets: today | yesterday | 7d | 30d | 90d | mtd | ytd | custom
-───────────────────────────────────────── */
 function buildRange(preset, from, to) {
   const now   = new Date();
   const start = new Date(now); start.setHours(0, 0, 0, 0);
@@ -57,14 +53,6 @@ function buildRange(preset, from, to) {
       throw new Error(`Unknown preset: ${preset}`);
   }
 }
-
-/* ─────────────────────────────────────────
-   Helper — choose grouping based on range size
-   ≤2 days  → hour (falls back to day since snapshots are daily)
-   ≤9 days  → day
-   ≤31 days → week  (7-day buckets, exactly 1 or 4 weeks)
-   >31 days → month
-───────────────────────────────────────── */
 function chooseGrouping(start, end) {
   const days = Math.round((end - start) / 86400000);
   if (days <= 9)  return "day";
@@ -72,12 +60,6 @@ function chooseGrouping(start, end) {
   return "month";
 }
 
-/* ─────────────────────────────────────────
-   Build evenly-spaced week buckets so that:
-   - 7d  → 1 bucket  (the whole week)
-   - 30d → 4 buckets (4 × ~7-day windows)
-   Each bucket: { label, start, end }
-───────────────────────────────────────── */
 function buildWeekBuckets(start, end) {
   const totalDays = Math.round((end - start) / 86400000) + 1;
   // snap to 4 buckets for 30-day windows, 1 for 7-day
@@ -93,7 +75,6 @@ function buildWeekBuckets(start, end) {
     const bEnd = new Date(bStart);
     bEnd.setDate(bEnd.getDate() + bucketSize - 1);
     bEnd.setHours(23, 59, 59, 999);
-    // never exceed the overall end date
     if (bEnd > end) bEnd.setTime(end.getTime());
 
     const label = `Week ${i + 1}`;
@@ -102,19 +83,11 @@ function buildWeekBuckets(start, end) {
   return buckets;
 }
 
-/* ─────────────────────────────────────────
-   Format a Date as YYYY-MM-DD for createdAt date comparison
-───────────────────────────────────────── */
 function dateOnly(d) {
   return d.toISOString().slice(0, 10);
 }
 
-/* ─────────────────────────────────────────
-   GET /stats?preset=7d | 30d | today | custom&from=&to=
 
-   Returns:
-   { meta, summary, revenue[], sales[] }
-───────────────────────────────────────── */
 module.exports = {
   getStats: async (req, res) => {
     try {
@@ -125,21 +98,17 @@ module.exports = {
       const { start, end } = buildRange(preset, req.query.from, req.query.to);
       const grouping = chooseGrouping(start, end);
 
-      // ── Shared where clause for both tables ──────────────────────────
       const dateWhere = {
         cafeId,
         createdAt: { [Op.between]: [start, end] },
       };
 
-      // ── Previous period (same length) ────────────────────────────────
       const len    = end - start;
       const pEnd   = new Date(start.getTime() - 1);
       const pStart = new Date(pEnd.getTime() - len);
 
-      // ── Run queries in parallel ──────────────────────────────────────
       const [cafeRows, itemRows, prevCafeRows] = await Promise.all([
 
-        // 1. Aggregated cafe stats for the period
         DailyCafeStat.findAll({
           where: dateWhere,
           attributes: [
@@ -149,7 +118,6 @@ module.exports = {
           raw: true,
         }),
 
-        // 2. Item breakdown for the period
         DailyItemStat.findAll({
           where: dateWhere,
           attributes: [
@@ -163,7 +131,6 @@ module.exports = {
           raw: true,
         }),
 
-        // 3. Previous period cafe stats (for % change KPIs)
         DailyCafeStat.findAll({
           where: {
             cafeId,
@@ -177,7 +144,6 @@ module.exports = {
         }),
       ]);
 
-      // ── Shape sales data ─────────────────────────────────────────────
       const sales = itemRows.map(row => ({
         name:         row.itemName,
         category:     row.itemCategory || "",
@@ -185,12 +151,10 @@ module.exports = {
         totalRevenue: parseFloat(row.totalRevenue) || 0,
       }));
 
-      // ── Current period summary ────────────────────────────────────────
       const totalRevenue = parseFloat(cafeRows[0]?.totalRevenue) || 0;
       const totalOrders  = parseInt(cafeRows[0]?.totalOrders)    || 0;
       const totalSold    = sales.reduce((s, i) => s + i.totalSold, 0);
 
-      // ── Previous period ────────────────────────────────────────────────
       const prevRevenue = parseFloat(prevCafeRows[0]?.totalRevenue) || 0;
       const prevOrders  = parseInt(prevCafeRows[0]?.totalOrders)    || 0;
 
@@ -201,11 +165,9 @@ module.exports = {
         ? ((totalOrders - prevOrders) / prevOrders * 100).toFixed(1)
         : null;
 
-      // ── Build revenue timeline based on grouping ─────────────────────
       let revenue = [];
 
       if (grouping === "day") {
-        // One row per day — fetch raw daily rows ordered by date
         const dailyRows = await DailyCafeStat.findAll({
           where: dateWhere,
           attributes: [
@@ -224,10 +186,8 @@ module.exports = {
         }));
 
       } else if (grouping === "week") {
-        // Build exactly 1 or 4 even week buckets and aggregate each
         const buckets = buildWeekBuckets(start, end);
 
-        // Fetch all daily rows for the period once
         const allDaily = await DailyCafeStat.findAll({
           where: dateWhere,
           attributes: ["createdAt", "totalRevenue", "totalOrders"],
@@ -247,7 +207,6 @@ module.exports = {
         });
 
       } else {
-        // month grouping (>31 days)
         const monthlyRows = await DailyCafeStat.findAll({
           where: dateWhere,
           attributes: [
@@ -281,8 +240,8 @@ module.exports = {
           pctRev,
           pctOrders,
         },
-        revenue,  // [{ period, revenue, orders }]
-        sales,    // [{ name, category, totalSold, totalRevenue }]
+        revenue, 
+        sales,    
       });
 
     } catch (e) {
