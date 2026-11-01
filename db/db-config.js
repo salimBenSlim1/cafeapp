@@ -1,4 +1,4 @@
-const { Sequelize, DataTypes } = require('sequelize');
+const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
 let sequelize;
@@ -23,11 +23,16 @@ if (process.env.NODE_ENV === 'production') {
   });
 } else {
   // For development, use local MySQL
-  sequelize = new Sequelize('cafeapp', 'root', '', {
-    host: 'localhost',
-    dialect: 'mysql',
-    logging: console.log
-  });
+  sequelize = new Sequelize(
+    process.env.DB_NAME || 'cafeapp',
+    process.env.DB_USER || 'root',
+    process.env.DB_PASSWORD || '',
+    {
+      host: process.env.DB_HOST || 'localhost',
+      dialect: 'mysql',
+      logging: process.env.DB_LOG_SQL === 'true' ? console.log : false
+    }
+  );
 }
 
 module.exports = sequelize;
