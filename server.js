@@ -1,5 +1,5 @@
 const express = require("express")
-const bodyParser = require('body-parser');
+const helmet = require('helmet');
 require('./jobs/cleanupOrderItems');
 const cors = require('cors');
 const verifyCafe=require('./middleware/cafeMiddlwareBasic')
@@ -13,7 +13,7 @@ const server = http.createServer(app);
 socketService.init(server); 
 const db = require('./models/relation');
 const itemRoute = require("./routes/items");
-const { globalLimiter, orderLimiter} = require('./middleware/rateLimiter');
+const { globalLimiter } = require('./middleware/rateLimiter');
 const orderRoute = require("./routes/order");
 const cafeRoute = require("./routes/cafe");
 const messageFormRoute = require("./routes/messagesForm");
@@ -45,7 +45,8 @@ app.use(cors({
 }));
 
 app.use(express.json())
-app.use(bodyParser.json());
+app.use(helmet());
+app.use(globalLimiter);
 app.use(cookieParser());
 app.use("/api", verifyCafe);
 app.use('/',messageFormRoute)
@@ -63,9 +64,9 @@ app.get('/getUserItems',verifyUser,getItemsForUser)
 app.get('/orders/last',verifyUser,getLastOrder)
 app.get('/start-session',startSession)
 app.use('/api',router)
-app.use(globalerrorhandling)
 app.post('/refresh',validateCookie(cookieSchema),refresh)
 app.post('/logout',logout)
-server.listen(5000,"0.0.0.0",()=>{
+app.use(globalerrorhandling)
+server.listen(Number(process.env.PORT) || 5000,"0.0.0.0",()=>{
     console.log('connected')
 })
